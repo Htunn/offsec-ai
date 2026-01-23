@@ -163,6 +163,10 @@ class OwaspScanner:
             findings = await self._check_a08_integrity_failures(target)
         elif category_id == "A10":
             findings = await self._check_a10_ssrf(target)
+        elif category_id == "A03_2025":
+            findings = await self._check_a03_2025_supply_chain(target)
+        elif category_id == "A10_2025":
+            findings = await self._check_a10_2025_exception_handling(target)
         else:
             findings = []
         
@@ -479,6 +483,131 @@ class OwaspScanner:
         # Only in deep mode
         if self.mode == ScanMode.DEEP:
             # TODO: Implement SSRF testing
+            pass
+        
+        return findings
+    
+    async def _check_a03_2025_supply_chain(self, target: str) -> List[OwaspFinding]:
+        """Check for software supply chain vulnerabilities (OWASP 2025 A03)."""
+        findings = []
+        
+        # Check for security.txt file (supply chain contact info)
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                resp = await client.get(f"https://{target}/.well-known/security.txt", follow_redirects=True)
+                if resp.status_code != 200:
+                    findings.append(OwaspFinding(
+                        category="A03_2025",
+                        severity=SeverityLevel.LOW,
+                        title="Missing security.txt File",
+                        description="No security.txt file for vulnerability disclosure",
+                        remediation_key="software_supply_chain",
+                        cwe_id=1395,
+                        evidence="/.well-known/security.txt not found",
+                    ))
+        except Exception:
+            findings.append(OwaspFinding(
+                category="A03_2025",
+                severity=SeverityLevel.LOW,
+                title="Missing security.txt File",
+                description="No security.txt file for vulnerability disclosure",
+                remediation_key="software_supply_chain",
+                cwe_id=1395,
+                evidence="/.well-known/security.txt not accessible",
+            ))
+        
+        # Check for Software Bill of Materials (SBOM)
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                sbom_paths = ["/.well-known/sbom", "/sbom.json", "/sbom.xml"]
+                sbom_found = False
+                for path in sbom_paths:
+                    try:
+                        resp = await client.get(f"https://{target}{path}", follow_redirects=True)
+                        if resp.status_code == 200:
+                            sbom_found = True
+                            break
+                    except:
+                        continue
+                
+                if not sbom_found:
+                    findings.append(OwaspFinding(
+                        category="A03_2025",
+                        severity=SeverityLevel.MEDIUM,
+                        title="Missing Software Bill of Materials (SBOM)",
+                        description="No publicly accessible SBOM found for supply chain transparency",
+                        remediation_key="software_supply_chain",
+                        cwe_id=829,
+                        evidence="SBOM not found at common locations",
+                    ))
+        except Exception:
+            pass
+        
+        return findings
+    
+    async def _check_a10_2025_exception_handling(self, target: str) -> List[OwaspFinding]:
+        """Check for exception handling issues (OWASP 2025 A10)."""
+        findings = []
+        
+        # Check for verbose error pages via security headers
+        try:
+            header_result = await self.header_checker.check_headers(target)
+            
+            # Server version disclosure
+            if header_result.server_header:
+                findings.append(OwaspFinding(
+                    category="A10_2025",
+                    severity=SeverityLevel.LOW,
+                    title="Server Version Disclosure in Error Handling",
+                    description="Server header exposes version information that may aid attackers in exception exploitation",
+                    remediation_key="exception_handling",
+                    cwe_id=209,
+                    evidence=f"Server: {header_result.server_header}",
+                ))
+            
+            # X-Powered-By disclosure
+            if header_result.powered_by:
+                findings.append(OwaspFinding(
+                    category="A10_2025",
+                    severity=SeverityLevel.LOW,
+                    title="Technology Stack Disclosure",
+                    description="X-Powered-By header exposes technology information useful for targeted attacks",
+                    remediation_key="exception_handling",
+                    cwe_id=209,
+                    evidence=f"X-Powered-By: {header_result.powered_by}",
+                ))
+        except Exception:
+            pass
+        
+        # Test for verbose error messages by requesting invalid paths
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=False) as client:
+                # Request non-existent page to trigger 404
+                resp = await client.get(f"https://{target}/nonexistent-test-path-{int(time.time())}", follow_redirects=False)
+                
+                # Check if response contains stack trace indicators
+                if resp.status_code == 404:
+                    body = resp.text.lower()
+                    stack_trace_indicators = [
+                        "traceback", "stack trace", "at line", 
+                        "exception", "error at", "file \"", 
+                        "in module", "line number", ".php on line",
+                        "at object.", "at function", "stacktrace"
+                    ]
+                    
+                    for indicator in stack_trace_indicators:
+                        if indicator in body:
+                            findings.append(OwaspFinding(
+                                category="A10_2025",
+                                severity=SeverityLevel.MEDIUM,
+                                title="Verbose Error Messages Detected",
+                                description="Error pages may expose stack traces or internal application details",
+                                remediation_key="exception_handling",
+                                cwe_id=209,
+                                evidence=f"404 error page contains '{indicator}'",
+                            ))
+                            break
+        except Exception:
             pass
         
         return findings

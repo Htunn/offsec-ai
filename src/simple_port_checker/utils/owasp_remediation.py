@@ -1,5 +1,5 @@
 """
-OWASP Top 10 2021 remediation database.
+OWASP Top 10 2021 & 2025 remediation database.
 
 This module contains remediation guidance, code examples, and reference
 documentation for OWASP Top 10 vulnerabilities with technology-specific solutions.
@@ -73,6 +73,19 @@ OWASP_CATEGORIES = {
         "name": "Server-Side Request Forgery (SSRF)",
         "description": "Fetching remote resources without validating user-supplied URL",
         "testable": True,
+    },
+    # OWASP Top 10 2025 New Categories
+    "A03_2025": {
+        "name": "Software Supply Chain Failures",
+        "description": "Vulnerabilities in software supply chain including compromised dependencies, insecure package sources",
+        "testable": True,
+        "version": "2025",
+    },
+    "A10_2025": {
+        "name": "Mishandling of Exceptional Conditions",
+        "description": "Improper error handling exposing sensitive information or causing security failures",
+        "testable": True,
+        "version": "2025",
     },
 }
 
@@ -553,6 +566,176 @@ sudo dpkg-reconfigure --priority=low unattended-upgrades
         ],
         cwe_ids=[1104],
     ),
+    
+    # A03_2025: Software Supply Chain Failures
+    "software_supply_chain": RemediationInfo(
+        description="Software supply chain vulnerabilities detected",
+        severity_rationale="Compromised dependencies can lead to full application compromise",
+        steps=[
+            "Implement Software Bill of Materials (SBOM) tracking",
+            "Use dependency scanning tools (Dependabot, Snyk, etc.)",
+            "Pin dependency versions and verify checksums",
+            "Monitor security advisories for all dependencies",
+            "Implement secure package repository policies",
+        ],
+        code_examples={
+            "generic": """# Package.json with integrity checks
+{
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "audit-ci": "^6.6.1"
+  }
+}
+
+# Add to CI/CD pipeline
+npm audit --audit-level=high
+npm audit fix
+
+# Python requirements.txt with hashes
+pip install --require-hashes -r requirements.txt""",
+            "nginx": """# Not applicable - use application-level dependency management
+# Ensure nginx modules are from trusted sources
+# Example: compile with verified third-party modules
+./configure --add-module=/path/to/verified-module
+make
+make install""",
+            "apache": """# Not applicable - use application-level dependency management
+# Verify Apache module sources
+# Example: use only official repositories
+apt-get install apache2 libapache2-mod-security2""",
+            "iis": """<!-- Not applicable - use application-level dependency management -->
+<!-- Ensure all IIS modules are digitally signed -->
+<!-- Verify module signatures before deployment -->""",
+            "cloudflare": """// Verify Worker dependencies
+// Use Cloudflare's curated packages
+// Example package.json with lockfile
+npm ci --production""",
+        },
+        references=[
+            "https://owasp.org/Top10/2025/A03_2025-Software_Supply_Chain_Failures/",
+            "https://slsa.dev/",
+            "https://www.cisa.gov/sbom",
+            "https://owasp.org/www-project-dependency-check/",
+        ],
+        cwe_ids=[1395, 829],
+    ),
+    
+    # A10_2025: Mishandling of Exceptional Conditions  
+    "exception_handling": RemediationInfo(
+        description="Improper exception and error handling detected",
+        severity_rationale="Exposed error messages can reveal system internals and aid attackers",
+        steps=[
+            "Implement centralized error handling",
+            "Never expose stack traces to users",
+            "Log errors securely without sensitive data",
+            "Use custom error pages",
+            "Validate all error paths for security implications",
+        ],
+        code_examples={
+            "apache": """# Custom error pages in httpd.conf or .htaccess
+ErrorDocument 404 /errors/404.html
+ErrorDocument 500 /errors/500.html
+ErrorDocument 403 /errors/403.html
+
+# Hide server version
+ServerTokens Prod
+ServerSignature Off
+
+# Disable directory listing
+Options -Indexes""",
+            "nginx": """# Custom error pages in nginx.conf
+error_page 404 /errors/404.html;
+error_page 500 502 503 504 /errors/50x.html;
+error_page 403 /errors/403.html;
+
+location = /errors/404.html {
+    internal;
+}
+
+location = /errors/50x.html {
+    internal;
+}
+
+# Hide version
+server_tokens off;
+
+# Disable directory listing
+autoindex off;""",
+            "iis": """<!-- web.config -->
+<system.webServer>
+  <httpErrors errorMode="Custom" existingResponse="Replace">
+    <remove statusCode="404"/>
+    <error statusCode="404" path="/errors/404.html" responseMode="File"/>
+    <remove statusCode="500"/>
+    <error statusCode="500" path="/errors/500.html" responseMode="File"/>
+    <remove statusCode="403"/>
+    <error statusCode="403" path="/errors/403.html" responseMode="File"/>
+  </httpErrors>
+  <security>
+    <requestFiltering removeServerHeader="true"/>
+  </security>
+  <httpProtocol>
+    <customHeaders>
+      <remove name="X-Powered-By"/>
+    </customHeaders>
+  </httpProtocol>
+</system.webServer>""",
+            "cloudflare": """// Cloudflare Workers secure error handling
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request))
+})
+
+async function handleRequest(request) {
+  try {
+    const response = await fetch(request)
+    return response
+  } catch (error) {
+    // Log error securely (structured logging)
+    console.error({
+      timestamp: new Date().toISOString(),
+      error: error.name,
+      path: new URL(request.url).pathname
+    })
+    
+    // Never expose error details to users
+    return new Response('An error occurred', { 
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    })
+  }
+}""",
+            "generic": """# Application-level secure error handling
+
+# Python example
+import logging
+
+logger = logging.getLogger(__name__)
+
+def secure_operation():
+    try:
+        # Your code here
+        result = risky_operation()
+        return result
+    except ValueError as e:
+        # Log error securely (no sensitive data)
+        logger.error(f"Operation failed: {type(e).__name__}")
+        # Return generic message to user
+        return {"error": "Invalid input. Please try again."}
+    except Exception as e:
+        # Log unexpected errors
+        logger.exception("Unexpected error occurred")
+        # Generic error message
+        return {"error": "An error occurred. Please contact support."}""",
+        },
+        references=[
+            "https://owasp.org/Top10/2025/A10_2025-Mishandling_of_Exceptional_Conditions/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html",
+            "https://cwe.mitre.org/data/definitions/703.html",
+        ],
+        cwe_ids=[703, 209, 248],
+    ),
 }
 
 
@@ -594,7 +777,7 @@ def get_remediation(remediation_key: str, tech_stack: str = "generic") -> Option
     )
 
 
-def get_category_info(category_id: str) -> Optional[dict]:
+def get_category_info(category_id: str) -> Optional[Dict]:
     """Get information about an OWASP category."""
     return OWASP_CATEGORIES.get(category_id)
 

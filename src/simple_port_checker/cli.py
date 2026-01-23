@@ -2053,11 +2053,13 @@ def _display_hybrid_identity_summary(results: List[HybridIdentityResult], durati
 @click.option("--timeout", default=10, help="Request timeout in seconds")
 def owasp_scan(targets, deep, categories, tech_stack, format, output, severity, verbose, timeout):
     """
-    Perform OWASP Top 10 2021 security vulnerability scan.
+    Perform OWASP Top 10 2021/2025 security vulnerability scan.
     
     By default, runs in safe-mode with passive checks only on categories:
     A02 (Cryptographic Failures), A05 (Security Misconfiguration),
     A06 (Vulnerable Components), A07 (Authentication Failures).
+    
+    OWASP 2025 new categories: A03_2025 (Software Supply Chain), A10_2025 (Exception Handling).
     
     Use --deep flag to enable active probing across all categories.
     
@@ -2071,6 +2073,9 @@ def owasp_scan(targets, deep, categories, tech_stack, format, output, severity, 
         
         # Scan specific categories with JSON output
         simple-port-checker owasp-scan example.com -c A02,A05 -f json -o results.json
+        
+        # OWASP 2025 categories
+        simple-port-checker owasp-scan example.com -c A03_2025,A10_2025 --verbose
         
         # Multiple targets with severity filter
         simple-port-checker owasp-scan site1.com site2.com --severity HIGH --verbose
@@ -2086,7 +2091,7 @@ def owasp_scan(targets, deep, categories, tech_stack, format, output, severity, 
     if categories:
         category_list = [c.strip().upper() for c in categories.split(",")]
         # Validate categories
-        valid_categories = ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"]
+        valid_categories = ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A03_2025", "A10_2025"]
         invalid = [c for c in category_list if c not in valid_categories]
         if invalid:
             console.print(f"[red]Error: Invalid categories: {', '.join(invalid)}[/red]")
@@ -2095,7 +2100,7 @@ def owasp_scan(targets, deep, categories, tech_stack, format, output, severity, 
     
     scan_mode = "deep" if deep else "safe"
     
-    console.print(f"[blue]Starting OWASP Top 10 2021 security scan[/blue]")
+    console.print(f"[blue]Starting OWASP Top 10 2021/2025 security scan[/blue]")
     console.print(f"[yellow]Scan Mode: {scan_mode.upper()}[/yellow]")
     console.print(f"[yellow]Targets: {len(targets)}[/yellow]")
     if category_list:
