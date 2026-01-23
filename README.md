@@ -3,7 +3,7 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/simple-port-checker)](https://pypistats.org/packages/simple-port-checker) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI Stats](https://img.shields.io/badge/PyPI%20Stats-simple--port--checker-blue)](https://pypistats.org/packages/simple-port-checker)
 
-A comprehensive Python tool for checking firewall ports, detecting L7 protection services (WAF, CDN, etc.), testing mTLS authentication, and scanning for OWASP Top 10 2021 vulnerabilities. Available as both a Python package and Docker container.
+A comprehensive Python tool for checking firewall ports, detecting L7 protection services (WAF, CDN, etc.), testing mTLS authentication, and scanning for OWASP Top 10 2021/2025 vulnerabilities. Available as both a Python package and Docker container.
 
 ## Features
 
@@ -14,7 +14,7 @@ A comprehensive Python tool for checking firewall ports, detecting L7 protection
 - 🏛️ **Certificate Authority Identification**: "Who signed my cert?" functionality with trust chain visualization
 - ⚠️ **Missing Intermediate Detection**: Identify incomplete certificate chains affecting browser compatibility
 - 🔑 **Hybrid Identity Detection**: Check for Azure AD/ADFS integration and federation endpoints
-- 🔍 **OWASP Top 10 2021 Scanner**: Automated vulnerability detection with remediation guidance (NEW!)
+- 🔍 **OWASP Top 10 2021/2025 Scanner**: Automated vulnerability detection with remediation guidance (NEW!)
 - 🛡️ **Security Header Analysis**: Grade HTTP security headers (HSTS, CSP, X-Frame-Options, etc.) (NEW!)
 - 📄 **Multi-Format Reporting**: Export scan results to PDF, JSON, or CSV with tech-specific remediation (NEW!)
 - 🌐 **DNS Trace**: Advanced DNS CNAME chain analysis and IP protection detection
@@ -466,15 +466,15 @@ Azure AD Integration: ❌ Not Detected
 
 ---
 
-# OWASP Top 10 2021 Vulnerability Scanner
+# OWASP Top 10 2021/2025 Vulnerability Scanner
 
 ## Overview
 
-The OWASP Top 10 2021 vulnerability scanner provides comprehensive security assessment for web applications and APIs. It detects common security vulnerabilities, provides severity-based risk scoring, and offers technology-specific remediation guidance.
+The OWASP Top 10 2021/2025 vulnerability scanner provides comprehensive security assessment for web applications and APIs. It detects common security vulnerabilities, provides severity-based risk scoring, and offers technology-specific remediation guidance.
 
 This is essential for:
 
-- **🔍 Security Assessments**: Automated detection of OWASP Top 10 2021 vulnerabilities
+- **🔍 Security Assessments**: Automated detection of OWASP Top 10 2021 & 2025 vulnerabilities
 - **📊 Risk Scoring**: Severity-based grading system (A-F) with automatic critical failure detection
 - **🛡️ Security Headers**: Analysis of HTTP security headers (HSTS, CSP, X-Frame-Options, etc.)
 - **🔧 Remediation**: Tech-specific fix guidance for Apache, Nginx, IIS, Cloudflare
@@ -499,6 +499,13 @@ This is essential for:
 | **A08** | Software/Data Integrity | ❌ | ✅ | Integrity checks |
 | **A09** | Logging/Monitoring | 🚫 | 🚫 | Not externally testable |
 | **A10** | Server-Side Request Forgery | ❌ | ✅ | SSRF testing |
+
+### OWASP Top 10 2025 Categories (NEW!)
+
+| Category | Name | Safe Mode | Deep Mode | Detection Method |
+|----------|------|-----------|-----------|------------------|
+| **A03_2025** | Software Supply Chain Failures | ✅ | ✅ | Security.txt, SBOM detection |
+| **A10_2025** | Mishandling of Exceptional Conditions | ✅ | ✅ | Server disclosure, verbose errors, stack traces |
 
 ### Scan Modes
 
@@ -591,14 +598,17 @@ simple-port-checker owasp-scan example.com --quiet
 ### Category-Specific Scanning
 
 ```bash
-# Scan specific OWASP categories
-simple-port-checker owasp-scan example.com -c A02,A05,A06
+# Scan specific OWASP categories (2021 and 2025 mixed)
+simple-port-checker owasp-scan example.com -c A02,A05,A06,A03_2025,A10_2025
 
 # Scan only cryptographic failures
 simple-port-checker owasp-scan example.com -c A02 --verbose
 
-# Custom category set
-simple-port-checker owasp-scan example.com -c A02,A05,A07 --deep
+# Scan OWASP 2025 categories only
+simple-port-checker owasp-scan example.com -c A03_2025,A10_2025 --verbose
+
+# Custom category set mixing 2021 and 2025
+simple-port-checker owasp-scan example.com -c A02,A05,A07,A03_2025,A10_2025 --deep
 ```
 
 ### Technology-Specific Remediation
@@ -713,7 +723,7 @@ import asyncio
 from simple_port_checker import OwaspScanner
 
 async def basic_owasp_scan():
-    """Perform basic OWASP Top 10 scan."""
+    """Perform basic OWASP Top 10 2021/2025 scan."""
     scanner = OwaspScanner(mode="safe", timeout=15.0)
     
     # Scan target
@@ -859,10 +869,10 @@ import asyncio
 from simple_port_checker import OwaspScanner
 
 async def category_specific_scan():
-    """Scan specific OWASP categories only."""
-    # Custom categories
+    """Scan specific OWASP categories (2021 and 2025)."""
+    # Custom categories - mix 2021 and 2025
     scanner = OwaspScanner(
-        enabled_categories=["A02", "A05", "A06"],
+        enabled_categories=["A02", "A05", "A06", "A03_2025", "A10_2025"],
         timeout=15.0
     )
     
@@ -928,7 +938,7 @@ asyncio.run(scan_with_remediation())
 
 ```
 ╭───────────────────── Security Scan Report ──────────────────────╮
-│ OWASP Top 10 2021 Security Assessment                           │
+│ OWASP Top 10 2021/2025 Security Assessment                      │
 │ Target: https://example.com                                     │
 │ Scan Mode: SAFE                                                 │
 │ Duration: 2.35s                                                 │
@@ -936,17 +946,24 @@ asyncio.run(scan_with_remediation())
 
 Overall Security Grade: D
 Total Score: 46
-Total Findings: 7
+Total Findings: 9
 
-A02: Cryptographic Failures
+A02: Cryptographic Failures (2021)
 Grade: B
    [HIGH] Missing HSTS Header
    Evidence: Strict-Transport-Security header not found
 
-A05: Security Misconfiguration
+A05: Security Misconfiguration (2021)
 Grade: D
    [HIGH] Missing Content-Security-Policy Header
    Evidence: Content-Security-Policy header not found
+
+A03_2025: Software Supply Chain Failures (2025)
+Grade: C
+   [MEDIUM] Missing Security.txt
+   Evidence: No /.well-known/security.txt found
+   [MEDIUM] Missing SBOM
+   Evidence: No Software Bill of Materials detected
    
    [MEDIUM] Missing X-Frame-Options Header
    Evidence: X-Frame-Options header not found
@@ -966,12 +983,14 @@ Grade: D
 
 ## Use Cases
 
-1. **Security Assessments**: Automated OWASP Top 10 compliance checking
-2. **DevSecOps Integration**: CI/CD pipeline security gates
-3. **Compliance Reporting**: Generate professional security reports
-4. **Penetration Testing**: Initial reconnaissance and vulnerability discovery
-5. **Bug Bounty**: Automated finding discovery and documentation
-6. **Security Training**: Learn OWASP vulnerabilities hands-on
+1. **Security Assessments**: Automated OWASP Top 10 2021/2025 compliance checking
+2. **DevSecOps Integration**: CI/CD pipeline security gates with both 2021 and 2025 standards
+3. **Compliance Reporting**: Generate professional security reports with latest OWASP guidelines
+4. **Supply Chain Security**: Validate software supply chain practices (OWASP 2025 A03_2025)
+5. **Error Handling Analysis**: Detect information disclosure in exception handling (OWASP 2025 A10_2025)
+6. **Penetration Testing**: Initial reconnaissance and vulnerability discovery
+7. **Bug Bounty**: Automated finding discovery and documentation
+8. **Security Training**: Learn OWASP 2021 & 2025 vulnerabilities hands-on
 
 ## Related Documentation
 
