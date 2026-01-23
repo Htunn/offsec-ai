@@ -1,5 +1,5 @@
 # Simple Port Checker   
-[![Publish to PyPI](https://github.com/Htunn/simple-port-checker/actions/workflows/publish.yml/badge.svg)](https://github.com/Htunn/simple-port-checker/actions/workflows/publish.yml) [![Docker Hub](https://img.shields.io/docker/pulls/htunnthuthu/simple-port-checker)](https://hub.docker.com/r/htunnthuthu/simple-port-checker) [![Docker Image Version](https://img.shields.io/docker/v/htunnthuthu/simple-port-checker?label=docker%20version)](https://hub.docker.com/r/htunnthuthu/simple-port-checker/tags)
+[![Docker Hub](https://img.shields.io/docker/pulls/htunnthuthu/simple-port-checker)](https://hub.docker.com/r/htunnthuthu/simple-port-checker) [![Docker Image Version](https://img.shields.io/docker/v/htunnthuthu/simple-port-checker?label=docker%20version)](https://hub.docker.com/r/htunnthuthu/simple-port-checker/tags)
 
 [![PyPI - Version](https://img.shields.io/pypi/v/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/simple-port-checker)](https://pypistats.org/packages/simple-port-checker) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI Stats](https://img.shields.io/badge/PyPI%20Stats-simple--port--checker-blue)](https://pypistats.org/packages/simple-port-checker)
 
