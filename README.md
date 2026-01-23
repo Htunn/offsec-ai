@@ -3,7 +3,7 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/simple-port-checker)](https://pypistats.org/packages/simple-port-checker) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/simple-port-checker)](https://pypi.org/project/simple-port-checker/) [![PyPI Stats](https://img.shields.io/badge/PyPI%20Stats-simple--port--checker-blue)](https://pypistats.org/packages/simple-port-checker)
 
-A comprehensive Python tool for checking firewall ports, detecting L7 protection services (WAF, CDN, etc.), and testing mTLS authentication. Available as both a Python package and Docker container.
+A comprehensive Python tool for checking firewall ports, detecting L7 protection services (WAF, CDN, etc.), testing mTLS authentication, and scanning for OWASP Top 10 2021 vulnerabilities. Available as both a Python package and Docker container.
 
 ## Features
 
@@ -13,7 +13,10 @@ A comprehensive Python tool for checking firewall ports, detecting L7 protection
 - 🔒 **SSL/TLS Certificate Analysis**: Comprehensive certificate chain analysis and validation
 - 🏛️ **Certificate Authority Identification**: "Who signed my cert?" functionality with trust chain visualization
 - ⚠️ **Missing Intermediate Detection**: Identify incomplete certificate chains affecting browser compatibility
-- 🔑 **Hybrid Identity Detection**: Check for Azure AD/ADFS integration and federation endpoints (NEW!)
+- 🔑 **Hybrid Identity Detection**: Check for Azure AD/ADFS integration and federation endpoints
+- 🔍 **OWASP Top 10 2021 Scanner**: Automated vulnerability detection with remediation guidance (NEW!)
+- 🛡️ **Security Header Analysis**: Grade HTTP security headers (HSTS, CSP, X-Frame-Options, etc.) (NEW!)
+- 📄 **Multi-Format Reporting**: Export scan results to PDF, JSON, or CSV with tech-specific remediation (NEW!)
 - 🌐 **DNS Trace**: Advanced DNS CNAME chain analysis and IP protection detection
 - 🚀 **Async Support**: High-performance concurrent scanning
 - 📊 **Rich Output**: Beautiful terminal output with progress bars and certificate analysis tables
@@ -97,6 +100,15 @@ port-checker l7-check example.com --trace-dns
 
 # Full scan with L7 detection
 port-checker full-scan example.com
+
+# OWASP Top 10 2021 Security Scan (NEW!)
+port-checker owasp-scan example.com
+
+# Deep scan with active probing and PDF report
+port-checker owasp-scan example.com --deep -f pdf -o security-report.pdf
+
+# Scan specific OWASP categories with tech-specific remediation
+port-checker owasp-scan example.com -c A02,A05,A06 -t nginx --verbose
 
 # Check for hybrid identity and ADFS (NEW!)
 port-checker hybrid-identity example.com

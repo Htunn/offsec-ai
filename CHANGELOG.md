@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-23
+
+### Added
+- **🔍 OWASP Top 10 2021 Vulnerability Scanner**: Comprehensive security assessment framework
+  - **`owasp-scan`**: Automated vulnerability detection for OWASP Top 10 2021 categories
+  - **Safe Mode (default)**: Passive-only security checks for A02, A05, A06, A07
+  - **Deep Mode**: Active probing with payload testing across all categories
+  - **Category Selection**: Scan specific OWASP categories (e.g., `-c A02,A05`)
+- **🛡️ Security Header Analysis**: HTTP security header grading and validation
+  - Comprehensive header checking (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy)
+  - Letter grade (A-F) assignment per header and overall
+  - CORS misconfiguration detection
+  - Cookie security flag analysis (Secure, HttpOnly, SameSite)
+- **📄 Multi-Format Reporting**: Export security findings in multiple formats
+  - **PDF Reports**: Professional assessment reports with remediation guidance
+  - **JSON Export**: Complete scan results with optional remediation details
+  - **CSV Export**: Tabular findings for spreadsheet analysis
+  - **Console Output**: Interactive terminal display with color-coded grades
+- **🔧 Technology-Specific Remediation**: Tailored fix guidance per infrastructure
+  - Apache, Nginx, IIS, Cloudflare, and generic remediation examples
+  - Code snippets for implementing security fixes
+  - Reference links to OWASP documentation
+  - CWE ID mappings for vulnerability tracking
+- **📊 Severity Scoring System**: Risk-based finding prioritization
+  - CRITICAL (15 pts): Automatic F grade for cryptographic failures
+  - HIGH (10 pts), MEDIUM (5 pts), LOW (1 pt)
+  - Overall security grade calculation (A-F)
+  - Severity filtering in CLI (`--severity CRITICAL`)
+- **🎯 Verbosity Controls**: Flexible output detail levels
+  - `--verbose`: Full findings with evidence and remediation
+  - Default: Category summary table with grades
+  - `--quiet`: Grade-only summary
+- **⚙️ Advanced Scanner Features**:
+  - Async concurrent scanning with rate limiting
+  - Batch target scanning support
+  - Configurable timeout and connection settings
+  - A09 (Logging/Monitoring) marked as "Not Testable" with explanation
+
+### Dependencies
+- Added `httpx>=0.25.0` for async HTTP requests
+- Added `reportlab>=4.0.0` for PDF generation
+
+### Documentation
+- Added comprehensive OWASP scanner guide (`docs/owasp-scanner.md`)
+- Added programmatic usage examples (`examples/owasp_scan_examples.py`)
+- Updated README with OWASP scanning features
+- Documented all scan modes, output formats, and filtering options
+
 ## [0.5.1] - 2025-09-21
 
 ### Fixed

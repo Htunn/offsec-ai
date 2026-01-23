@@ -31,10 +31,13 @@ from .core.l7_detector import L7Detector
 from .core.mtls_checker import MTLSChecker
 from .core.cert_analyzer import CertificateAnalyzer
 from .core.hybrid_identity_checker import HybridIdentityChecker, HybridIdentityResult
+from .core.owasp_scanner import OwaspScanner
 from .models.scan_result import ScanResult, BatchScanResult
 from .models.l7_result import L7Result, BatchL7Result
 from .models.mtls_result import MTLSResult, BatchMTLSResult
+from .models.owasp_result import OwaspScanResult, SeverityLevel
 from .utils.common_ports import TOP_PORTS, get_service_name, get_port_description
+from .utils.exporters import OwaspPdfExporter, export_to_csv, export_to_json
 from . import __version__
 
 
@@ -2036,4 +2039,290 @@ def _display_hybrid_identity_summary(results: List[HybridIdentityResult], durati
                 if result.openid_config_found:
                     indicators.append("OpenID")
                 console.print(f"  • {result.fqdn} - {', '.join(indicators)}")
+
+
+@main.command("owasp-scan")
+@click.argument("targets", nargs=-1, required=True)
+@click.option("--deep/--safe-mode", default=False, help="Enable deep scan with active probing (default: safe-mode)")
+@click.option("--categories", "-c", help="Comma-separated OWASP categories to scan (e.g., A01,A02,A05)")
+@click.option("--tech-stack", "-t", type=click.Choice(["apache", "nginx", "iis", "cloudflare", "generic"]), default="generic", help="Technology stack for remediation examples")
+@click.option("--format", "-f", type=click.Choice(["console", "json", "csv", "pdf"]), default="console", help="Output format")
+@click.option("--output", "-o", type=click.Path(), help="Output file path (required for json/csv/pdf formats)")
+@click.option("--severity", type=click.Choice(["CRITICAL", "HIGH", "MEDIUM", "LOW"]), help="Filter by minimum severity level")
+@click.option("--verbose/--quiet", default=False, help="Verbose (full findings) or quiet (grade summary only)")
+@click.option("--timeout", default=10, help="Request timeout in seconds")
+def owasp_scan(targets, deep, categories, tech_stack, format, output, severity, verbose, timeout):
+    """
+    Perform OWASP Top 10 2021 security vulnerability scan.
+    
+    By default, runs in safe-mode with passive checks only on categories:
+    A02 (Cryptographic Failures), A05 (Security Misconfiguration),
+    A06 (Vulnerable Components), A07 (Authentication Failures).
+    
+    Use --deep flag to enable active probing across all categories.
+    
+    Examples:
+    
+        # Basic scan with console output
+        simple-port-checker owasp-scan example.com
+        
+        # Deep scan with PDF report
+        simple-port-checker owasp-scan example.com --deep -f pdf -o report.pdf
+        
+        # Scan specific categories with JSON output
+        simple-port-checker owasp-scan example.com -c A02,A05 -f json -o results.json
+        
+        # Multiple targets with severity filter
+        simple-port-checker owasp-scan site1.com site2.com --severity HIGH --verbose
+    """
+    
+    # Validate output file for non-console formats
+    if format != "console" and not output:
+        console.print("[red]Error: --output (-o) is required for json/csv/pdf formats[/red]")
+        sys.exit(1)
+    
+    # Parse categories
+    category_list = None
+    if categories:
+        category_list = [c.strip().upper() for c in categories.split(",")]
+        # Validate categories
+        valid_categories = ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"]
+        invalid = [c for c in category_list if c not in valid_categories]
+        if invalid:
+            console.print(f"[red]Error: Invalid categories: {', '.join(invalid)}[/red]")
+            console.print(f"[yellow]Valid categories: {', '.join(valid_categories)}[/yellow]")
+            sys.exit(1)
+    
+    scan_mode = "deep" if deep else "safe"
+    
+    console.print(f"[blue]Starting OWASP Top 10 2021 security scan[/blue]")
+    console.print(f"[yellow]Scan Mode: {scan_mode.upper()}[/yellow]")
+    console.print(f"[yellow]Targets: {len(targets)}[/yellow]")
+    if category_list:
+        console.print(f"[yellow]Categories: {', '.join(category_list)}[/yellow]")
+    console.print()
+    
+    # Run scan
+    asyncio.run(
+        _run_owasp_scan(
+            list(targets),
+            scan_mode,
+            category_list,
+            tech_stack,
+            format,
+            output,
+            severity,
+            verbose,
+            timeout,
+        )
+    )
+
+
+async def _run_owasp_scan(
+    targets: List[str],
+    scan_mode: str,
+    categories: Optional[List[str]],
+    tech_stack: str,
+    output_format: str,
+    output_file: Optional[str],
+    severity_filter: Optional[str],
+    verbose: bool,
+    timeout: float,
+):
+    """Run OWASP vulnerability scan."""
+    
+    # Initialize scanner
+    scanner = OwaspScanner(
+        mode=scan_mode,
+        categories=categories,
+        timeout=timeout,
+    )
+    
+    # Scan targets
+    results = []
+    
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task(f"Scanning {len(targets)} target(s)...", total=len(targets))
+        
+        for target in targets:
+            try:
+                result = await scanner.scan(target)
+                results.append(result)
+                progress.update(task, advance=1)
+            except Exception as e:
+                console.print(f"[red]Error scanning {target}: {str(e)}[/red]")
+                progress.update(task, advance=1)
+    
+    console.print()
+    
+    # Filter by severity if specified
+    if severity_filter:
+        severity_level = SeverityLevel(severity_filter)
+        severity_values = {
+            SeverityLevel.CRITICAL: 4,
+            SeverityLevel.HIGH: 3,
+            SeverityLevel.MEDIUM: 2,
+            SeverityLevel.LOW: 1,
+        }
+        min_severity_value = severity_values[severity_level]
+        
+        for result in results:
+            for category in result.categories:
+                category.findings = [
+                    f for f in category.findings
+                    if severity_values[f.severity] >= min_severity_value
+                ]
+    
+    # Output results
+    if output_format == "console":
+        _display_owasp_results(results, verbose)
+    elif output_format == "json":
+        for result in results:
+            export_to_json(result, output_file, include_remediation=True, tech_stack=tech_stack)
+        console.print(f"[green]✓ Results exported to {output_file}[/green]")
+    elif output_format == "csv":
+        for result in results:
+            export_to_csv(result, output_file, tech_stack=tech_stack)
+        console.print(f"[green]✓ Results exported to {output_file}[/green]")
+    elif output_format == "pdf":
+        exporter = OwaspPdfExporter(tech_stack=tech_stack)
+        for result in results:
+            exporter.export(result, output_file)
+        console.print(f"[green]✓ PDF report generated: {output_file}[/green]")
+
+
+def _display_owasp_results(results: List[OwaspScanResult], verbose: bool):
+    """Display OWASP scan results in console."""
+    
+    for result in results:
+        # Header
+        console.print()
+        console.print(Panel(
+            f"[bold]OWASP Top 10 2021 Security Assessment[/bold]\n"
+            f"Target: {result.target}\n"
+            f"Scan Mode: {result.scan_mode.value.upper()}\n"
+            f"Duration: {result.scan_duration:.2f}s",
+            title="Security Scan Report",
+            border_style="blue",
+        ))
+        console.print()
+        
+        # Overall grade
+        grade_color = _get_grade_color(result.overall_grade)
+        console.print(f"[bold]Overall Security Grade: [{grade_color}]{result.overall_grade}[/{grade_color}][/bold]")
+        console.print(f"Total Score: {result.overall_score}")
+        console.print(f"Total Findings: {len(result.all_findings)}")
+        
+        if result.has_critical:
+            console.print(f"[bold red]⚠ CRITICAL: {len(result.critical_findings)} critical finding(s) detected![/bold red]")
+        
+        console.print()
+        
+        # Quiet mode: just show grades
+        if not verbose:
+            _display_category_summary(result)
+        else:
+            # Verbose mode: show all findings
+            _display_detailed_findings(result)
+
+
+def _display_category_summary(result: OwaspScanResult):
+    """Display category summary table."""
+    
+    table = Table(title="Category Grades", show_header=True, header_style="bold magenta")
+    table.add_column("ID", style="cyan", width=4)
+    table.add_column("Category", style="white", width=40)
+    table.add_column("Grade", justify="center", width=6)
+    table.add_column("Findings", justify="center", width=8)
+    table.add_column("Score", justify="center", width=6)
+    
+    for category in result.categories:
+        grade_color = _get_grade_color(category.grade)
+        
+        if not category.testable:
+            table.add_row(
+                category.category_id,
+                category.category_name,
+                "[dim]N/A[/dim]",
+                "[dim]Not Testable[/dim]",
+                "[dim]-[/dim]",
+            )
+        else:
+            findings_count = str(len(category.findings))
+            findings_style = "red" if len(category.findings) > 0 else "green"
+            
+            table.add_row(
+                category.category_id,
+                category.category_name,
+                f"[{grade_color}]{category.grade}[/{grade_color}]",
+                f"[{findings_style}]{findings_count}[/{findings_style}]",
+                str(category.category_score),
+            )
+    
+    console.print(table)
+    console.print()
+    console.print("[dim]Run with --verbose flag to see detailed findings[/dim]")
+
+
+def _display_detailed_findings(result: OwaspScanResult):
+    """Display detailed findings for each category."""
+    
+    for category in result.categories:
+        # Category header
+        console.print(f"\n[bold cyan]{category.category_id}: {category.category_name}[/bold cyan]")
+        console.print(f"Grade: [{_get_grade_color(category.grade)}]{category.grade}[/{_get_grade_color(category.grade)}]")
+        
+        if not category.testable:
+            console.print(f"[dim italic]{category.not_testable_reason}[/dim italic]")
+            continue
+        
+        if not category.findings:
+            console.print("[green]✓ No issues found[/green]")
+            continue
+        
+        # Findings table
+        table = Table(show_header=True, header_style="bold yellow", box=None)
+        table.add_column("Severity", width=10)
+        table.add_column("Finding", width=50)
+        table.add_column("Evidence", width=30)
+        
+        for finding in category.findings:
+            severity_color = _get_severity_color(finding.severity)
+            table.add_row(
+                f"[{severity_color}]{finding.severity.value}[/{severity_color}]",
+                f"[bold]{finding.title}[/bold]\n{finding.description}",
+                finding.evidence or "-",
+            )
+        
+        console.print(table)
+
+
+def _get_grade_color(grade: str) -> str:
+    """Get Rich color for grade."""
+    colors = {
+        "A": "green",
+        "B": "bright_green",
+        "C": "yellow",
+        "D": "orange1",
+        "F": "red",
+        "N/A": "dim",
+    }
+    return colors.get(grade, "white")
+
+
+def _get_severity_color(severity: SeverityLevel) -> str:
+    """Get Rich color for severity."""
+    colors = {
+        SeverityLevel.CRITICAL: "bold red",
+        SeverityLevel.HIGH: "red",
+        SeverityLevel.MEDIUM: "yellow",
+        SeverityLevel.LOW: "cyan",
+    }
+    return colors.get(severity, "white")
 

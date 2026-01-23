@@ -12,7 +12,7 @@ pip install simple-port-checker
 
 ```python
 import asyncio
-from simple_port_checker import PortChecker, L7Detector, CertificateAnalyzer, MTLSChecker, HybridIdentityChecker
+from simple_port_checker import PortChecker, L7Detector, CertificateAnalyzer, MTLSChecker, HybridIdentityChecker, OwaspScanner
 
 async def main():
     # Basic port scanning
@@ -33,6 +33,12 @@ async def main():
     print(f"Issuer: {cert_chain.server_cert.issuer}")
     print(f"Valid: {cert_chain.server_cert.is_valid_now}")
     print(f"Chain Complete: {cert_chain.chain_complete}")
+    
+    # OWASP Top 10 vulnerability scanning
+    owasp_scanner = OwaspScanner(mode="safe")
+    owasp_result = await owasp_scanner.scan("example.com")
+    print(f"Security Grade: {owasp_result.overall_grade}")
+    print(f"Total Findings: {len(owasp_result.all_findings)}")
     
     # Hybrid identity detection
     hybrid_checker = HybridIdentityChecker()
@@ -1275,6 +1281,507 @@ async def hybrid_identity_with_error_handling():
 asyncio.run(check_hybrid_identity())
 ```
 
+---
+
+## OWASP Top 10 Vulnerability Scanner
+
+### OwaspScanner
+
+The `OwaspScanner` class performs comprehensive security vulnerability scanning based on OWASP Top 10 2021 categories.
+
+#### Constructor
+
+```python
+OwaspScanner(
+    mode: str = "safe",
+    enabled_categories: Optional[List[str]] = None,
+    timeout: float = 10.0
+)
+```
+
+**Parameters:**
+- `mode` (str): Scan mode - either "safe" (passive scanning) or "deep" (active probing). Default: "safe"
+  - **Safe mode**: Only scans A02, A05, A06, A07 (passive header analysis)
+  - **Deep mode**: Scans all testable categories (excludes only A09)
+- `enabled_categories` (List[str], optional): Specific OWASP categories to scan (e.g., ["A02", "A05"]). Overrides mode settings.
+- `timeout` (float): Timeout for HTTP requests in seconds. Default: 10.0
+
+**Example:**
+```python
+from simple_port_checker import OwaspScanner
+
+# Safe mode scanner (default)
+scanner = OwaspScanner(mode="safe", timeout=15.0)
+
+# Deep mode scanner
+deep_scanner = OwaspScanner(mode="deep")
+
+# Custom categories only
+custom_scanner = OwaspScanner(enabled_categories=["A02", "A05", "A06"])
+```
+
+#### Methods
+
+##### scan()
+
+Scan a single target for OWASP Top 10 vulnerabilities.
+
+```python
+async def scan(
+    self,
+    target: str,
+    port: int = 443,
+    tech_stack: str = "generic"
+) -> OwaspScanResult
+```
+
+**Parameters:**
+- `target` (str): Hostname or IP address to scan
+- `port` (int): Port number to scan. Default: 443
+- `tech_stack` (str): Technology stack for tailored remediation ("apache", "nginx", "iis", "cloudflare", "generic"). Default: "generic"
+
+**Returns:** `OwaspScanResult` object containing scan results
+
+**Example:**
+```python
+import asyncio
+from simple_port_checker import OwaspScanner
+
+async def main():
+    scanner = OwaspScanner(mode="safe")
+    result = await scanner.scan("example.com", port=443, tech_stack="nginx")
+    
+    print(f"Target: {result.target}:{result.port}")
+    print(f"Overall Grade: {result.overall_grade}")
+    print(f"Total Score: {result.total_score}")
+    print(f"Total Findings: {len(result.all_findings)}")
+    
+    # Display findings by severity
+    for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+        findings = [f for f in result.all_findings if f.severity.value == severity]
+        if findings:
+            print(f"\n{severity} ({len(findings)} findings):")
+            for finding in findings:
+                print(f"  - [{finding.category}] {finding.title}")
+
+asyncio.run(main())
+```
+
+##### batch_scan()
+
+Scan multiple targets in parallel.
+
+```python
+async def batch_scan(
+    self,
+    targets: List[Tuple[str, int]],
+    tech_stack: str = "generic",
+    max_concurrent: int = 5
+) -> BatchOwaspResult
+```
+
+**Parameters:**
+- `targets` (List[Tuple[str, int]]): List of (hostname, port) tuples
+- `tech_stack` (str): Technology stack for all targets. Default: "generic"
+- `max_concurrent` (int): Maximum concurrent scans. Default: 5
+
+**Returns:** `BatchOwaspResult` object containing all scan results
+
+**Example:**
+```python
+import asyncio
+from simple_port_checker import OwaspScanner
+
+async def main():
+    scanner = OwaspScanner(mode="deep")
+    targets = [
+        ("example.com", 443),
+        ("api.example.com", 443),
+        ("admin.example.com", 443)
+    ]
+    
+    batch_result = await scanner.batch_scan(targets, max_concurrent=3)
+    
+    print(f"Scanned {batch_result.total_scanned} targets")
+    print(f"Failed: {batch_result.failed_count}")
+    
+    for target_result in batch_result.results:
+        print(f"\n{target_result.target}: Grade {target_result.overall_grade}")
+
+asyncio.run(main())
+```
+
+---
+
+### SecurityHeaderChecker
+
+The `SecurityHeaderChecker` class analyzes HTTP security headers and detects common misconfigurations.
+
+#### Constructor
+
+```python
+SecurityHeaderChecker(timeout: float = 10.0)
+```
+
+**Parameters:**
+- `timeout` (float): Timeout for HTTP requests. Default: 10.0
+
+#### Methods
+
+##### check_headers()
+
+Analyze security headers for a single target.
+
+```python
+async def check_headers(
+    self,
+    target: str,
+    port: int = 443,
+    use_https: bool = True
+) -> HeaderAnalysisResult
+```
+
+**Parameters:**
+- `target` (str): Hostname or IP address
+- `port` (int): Port number. Default: 443
+- `use_https` (bool): Use HTTPS protocol. Default: True
+
+**Returns:** `HeaderAnalysisResult` with security header grades and findings
+
+**Example:**
+```python
+import asyncio
+from simple_port_checker.core import SecurityHeaderChecker
+
+async def main():
+    checker = SecurityHeaderChecker(timeout=15.0)
+    result = await checker.check_headers("example.com", port=443)
+    
+    print(f"Security Headers Analysis for {result.url}")
+    print(f"HSTS Grade: {result.hsts_grade}")
+    print(f"CSP Grade: {result.csp_grade}")
+    print(f"CORS Issues: {result.cors_issues}")
+    
+    if result.server_header:
+        print(f"Server: {result.server_header}")
+    if result.powered_by:
+        print(f"X-Powered-By: {result.powered_by}")
+
+asyncio.run(main())
+```
+
+---
+
+### OWASP Result Models
+
+#### OwaspScanResult
+
+Main result object from an OWASP scan.
+
+**Properties:**
+- `target` (str): Scanned hostname
+- `port` (int): Scanned port
+- `scan_mode` (ScanMode): "safe" or "deep"
+- `timestamp` (datetime): Scan completion time
+- `duration` (float): Scan duration in seconds
+- `categories` (Dict[str, OwaspCategoryResult]): Results per category
+- `overall_grade` (str): Overall security grade (A-F)
+- `total_score` (int): Total vulnerability score
+- `tech_stack` (str): Technology stack used for remediation
+
+**Computed Properties:**
+- `all_findings` (List[OwaspFinding]): All findings across categories
+- `critical_findings` (List[OwaspFinding]): CRITICAL severity findings
+- `high_findings` (List[OwaspFinding]): HIGH severity findings
+- `medium_findings` (List[OwaspFinding]): MEDIUM severity findings
+- `low_findings` (List[OwaspFinding]): LOW severity findings
+
+**Methods:**
+- `calculate_overall_grade() -> str`: Calculate overall security grade (auto-F if critical cryptographic failures)
+- `get_findings_by_severity(severity: SeverityLevel) -> List[OwaspFinding]`: Filter findings by severity
+
+**Example:**
+```python
+result = await scanner.scan("example.com")
+
+# Access category results
+a02_result = result.categories.get("A02")
+if a02_result:
+    print(f"A02 Grade: {a02_result.grade}")
+    print(f"A02 Findings: {len(a02_result.findings)}")
+
+# Get critical issues
+critical = result.critical_findings
+if critical:
+    print(f"\n⚠️  {len(critical)} CRITICAL issues found:")
+    for finding in critical:
+        print(f"  - {finding.title}")
+        print(f"    {finding.description}")
+```
+
+#### OwaspFinding
+
+Individual vulnerability finding.
+
+**Properties:**
+- `category` (str): OWASP category (e.g., "A02")
+- `title` (str): Finding title
+- `description` (str): Detailed description
+- `severity` (SeverityLevel): CRITICAL, HIGH, MEDIUM, or LOW
+- `evidence` (str): Technical evidence or details
+- `cwe_ids` (List[str], optional): Related CWE identifiers
+
+**Example:**
+```python
+for finding in result.all_findings:
+    print(f"[{finding.severity.value}] {finding.category}: {finding.title}")
+    print(f"  Evidence: {finding.evidence}")
+    if finding.cwe_ids:
+        print(f"  CWE: {', '.join(finding.cwe_ids)}")
+```
+
+#### SeverityLevel
+
+Enum for finding severity levels.
+
+**Values:**
+- `CRITICAL`: 15 points (auto-F grade for A02 cryptographic failures)
+- `HIGH`: 10 points
+- `MEDIUM`: 5 points
+- `LOW`: 1 point
+
+#### OwaspCategoryResult
+
+Result for a single OWASP category.
+
+**Properties:**
+- `category_id` (str): Category identifier (A01-A10)
+- `category_name` (str): Category name
+- `findings` (List[OwaspFinding]): Findings for this category
+- `scanned` (bool): Whether category was scanned
+- `grade` (str): Category grade (A-F)
+- `score` (int): Category vulnerability score
+
+---
+
+### Export Functions
+
+#### PDF Export
+
+Generate a comprehensive PDF report.
+
+```python
+from simple_port_checker.utils import OwaspPdfExporter
+
+exporter = OwaspPdfExporter()
+exporter.export(result, "security_report.pdf", tech_stack="nginx")
+```
+
+**OwaspPdfExporter Methods:**
+
+```python
+def export(
+    self,
+    result: OwaspScanResult,
+    output_path: str,
+    tech_stack: str = "generic",
+    include_remediation: bool = True
+) -> None
+```
+
+**Parameters:**
+- `result`: OwaspScanResult object
+- `output_path`: Path for output PDF file
+- `tech_stack`: Technology stack for remediation examples
+- `include_remediation`: Include remediation guidance. Default: True
+
+**PDF Report Contents:**
+- Cover page with overall grade and scan metadata
+- Executive summary with findings breakdown
+- Category-by-category analysis
+- Detailed findings with evidence
+- Remediation guidance with code examples
+- CWE references
+
+#### CSV Export
+
+Export findings to CSV format.
+
+```python
+from simple_port_checker.utils import export_to_csv
+
+export_to_csv(result, "findings.csv")
+```
+
+**Function Signature:**
+```python
+def export_to_csv(result: OwaspScanResult, output_path: str) -> None
+```
+
+**CSV Columns:**
+- Category
+- Severity
+- Title
+- Description
+- Evidence
+- CWE IDs
+
+#### JSON Export
+
+Export complete results to JSON.
+
+```python
+from simple_port_checker.utils import export_to_json
+
+export_to_json(result, "results.json", tech_stack="apache", include_remediation=True)
+```
+
+**Function Signature:**
+```python
+def export_to_json(
+    result: OwaspScanResult,
+    output_path: str,
+    tech_stack: str = "generic",
+    include_remediation: bool = False,
+    indent: int = 2
+) -> None
+```
+
+**Parameters:**
+- `result`: OwaspScanResult object
+- `output_path`: Path for output JSON file
+- `tech_stack`: Technology stack for remediation filtering
+- `include_remediation`: Include remediation data. Default: False
+- `indent`: JSON indentation spaces. Default: 2
+
+---
+
+### Remediation Access
+
+Access remediation guidance programmatically.
+
+```python
+from simple_port_checker.utils import get_remediation
+
+# Get remediation for specific category and tech stack
+remediation = get_remediation("A02", tech_stack="nginx")
+
+if remediation:
+    print(f"Description: {remediation.description}")
+    print(f"\nRemediation Steps:")
+    for i, step in enumerate(remediation.steps, 1):
+        print(f"{i}. {step}")
+    
+    # Get tech-specific code example
+    if "nginx" in remediation.code_examples:
+        print(f"\nNginx Configuration:")
+        print(remediation.code_examples["nginx"])
+    
+    print(f"\nReferences:")
+    for ref in remediation.references:
+        print(f"  - {ref}")
+    
+    print(f"\nCWE IDs: {', '.join(remediation.cwe_ids)}")
+```
+
+**Available Tech Stacks:**
+- `apache`: Apache HTTP Server
+- `nginx`: Nginx
+- `iis`: Microsoft IIS
+- `cloudflare`: Cloudflare CDN
+- `generic`: Framework-agnostic guidance
+
+**OWASP Categories:**
+- A01: Broken Access Control
+- A02: Cryptographic Failures (testable)
+- A03: Injection
+- A04: Insecure Design
+- A05: Security Misconfiguration (testable)
+- A06: Vulnerable and Outdated Components (testable)
+- A07: Identification and Authentication Failures (testable)
+- A08: Software and Data Integrity Failures
+- A09: Security Logging and Monitoring Failures (not externally testable)
+- A10: Server-Side Request Forgery (SSRF)
+
+---
+
+### Complete OWASP Scanner Example
+
+```python
+import asyncio
+from simple_port_checker import OwaspScanner
+from simple_port_checker.utils import OwaspPdfExporter, export_to_csv, export_to_json
+
+async def comprehensive_scan():
+    # Configure scanner
+    scanner = OwaspScanner(
+        mode="deep",
+        timeout=15.0
+    )
+    
+    # Scan target
+    print("Scanning example.com...")
+    result = await scanner.scan(
+        "example.com",
+        port=443,
+        tech_stack="nginx"
+    )
+    
+    # Display results
+    print(f"\n{'='*60}")
+    print(f"Security Assessment: {result.target}:{result.port}")
+    print(f"{'='*60}")
+    print(f"Overall Grade: {result.overall_grade}")
+    print(f"Total Score: {result.total_score}")
+    print(f"Scan Mode: {result.scan_mode.value}")
+    print(f"Duration: {result.duration:.2f}s")
+    
+    # Show findings by severity
+    for severity in ["CRITICAL", "HIGH", "MEDIUM", "LOW"]:
+        findings = result.get_findings_by_severity(severity)
+        if findings:
+            print(f"\n{severity} ({len(findings)}):")
+            for finding in findings:
+                print(f"  [{finding.category}] {finding.title}")
+    
+    # Export results
+    print(f"\nExporting results...")
+    
+    # PDF report with remediation
+    pdf_exporter = OwaspPdfExporter()
+    pdf_exporter.export(
+        result,
+        "security_report.pdf",
+        tech_stack="nginx",
+        include_remediation=True
+    )
+    print("  ✓ PDF: security_report.pdf")
+    
+    # CSV for spreadsheet analysis
+    export_to_csv(result, "findings.csv")
+    print("  ✓ CSV: findings.csv")
+    
+    # JSON with remediation for automation
+    export_to_json(
+        result,
+        "results.json",
+        tech_stack="nginx",
+        include_remediation=True
+    )
+    print("  ✓ JSON: results.json")
+    
+    # Category-specific analysis
+    print(f"\nCategory Analysis:")
+    for cat_id in ["A02", "A05", "A06", "A07"]:
+        cat_result = result.categories.get(cat_id)
+        if cat_result and cat_result.scanned:
+            print(f"  {cat_id}: Grade {cat_result.grade} ({cat_result.score} points, {len(cat_result.findings)} findings)")
+
+asyncio.run(comprehensive_scan())
+```
+
+---
+
 ## Best Practices
 
 1. **Always use async/await context**:
@@ -1345,6 +1852,52 @@ asyncio.run(check_hybrid_identity())
            print(f"Missing: {', '.join(cert_chain.missing_intermediates)}")
    ```
 
+9. **OWASP scanning best practices**:
+   ```python
+   # Start with safe mode (passive scanning)
+   scanner = OwaspScanner(mode="safe")
+   result = await scanner.scan("example.com")
+   
+   # Only use deep mode when you have permission
+   # Deep mode performs active probing which may trigger alerts
+   deep_scanner = OwaspScanner(mode="deep")
+   
+   # Use appropriate tech stack for targeted remediation
+   result = await scanner.scan("example.com", tech_stack="nginx")
+   ```
+
+10. **Batch OWASP scanning with concurrency control**:
+    ```python
+    # Limit concurrent scans to avoid overwhelming targets
+    batch_result = await scanner.batch_scan(
+        targets=[("example.com", 443), ("api.example.com", 443)],
+        max_concurrent=3  # Adjust based on target capacity
+    )
+    ```
+
+11. **Filter OWASP findings by severity**:
+    ```python
+    result = await scanner.scan("example.com")
+    
+    # Focus on critical and high severity issues first
+    critical = result.critical_findings
+    high = result.high_findings
+    
+    print(f"Immediate action required: {len(critical)} critical, {len(high)} high")
+    ```
+
+12. **Export OWASP results for reporting**:
+    ```python
+    from simple_port_checker.utils import OwaspPdfExporter, export_to_csv
+    
+    # PDF for stakeholder reports
+    pdf_exporter = OwaspPdfExporter()
+    pdf_exporter.export(result, "report.pdf", include_remediation=True)
+    
+    # CSV for tracking and spreadsheet analysis
+    export_to_csv(result, "findings.csv")
+    ```
+
 ## Legal and Ethical Considerations
 
 - Only scan systems you own or have explicit permission to test
@@ -1352,3 +1905,5 @@ asyncio.run(check_hybrid_identity())
 - Use rate limiting to avoid overwhelming target systems
 - Be aware that scanning may trigger security alerts
 - Consider using the library in compliance with your organization's security policies
+- **OWASP scanning**: Deep mode performs active probing - ensure you have authorization before use
+- **Vulnerability disclosure**: Responsibly disclose discovered vulnerabilities following industry best practices
