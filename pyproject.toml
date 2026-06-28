@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "offsec-ai"
-version = "2.0.0"
+version = "2.0.1"
 description = "Offensive-security toolkit: port scanning, L7/WAF detection, mTLS, certificate analysis, OWASP Top 10, AI/LLM OWASP Top 10 black-box probing, and MCP endpoint security scanning"
 readme = "README.md"
 requires-python = ">=3.12"

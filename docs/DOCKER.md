@@ -9,6 +9,7 @@ A comprehensive, lightweight Docker container for network secu## 🔒 Certificat
 | Tag | Description | Size | Architectures |
 |-----|-------------|------|---------------|
 | `latest` | Latest stable release | ~60MB | `linux/amd64`, `linux/arm64` |
+| `v2.0.1` | v2.0.1 — logo fix, docs cleanup | ~60MB | `linux/amd64`, `linux/arm64` |
 | `v2.0.0` | v2.0.0 — AI/LLM scanner, MCP scanner, Gemini judge | ~60MB | `linux/amd64`, `linux/arm64` |
 
 **Recommendation**: Use `latest` for the most recent features, or pin to specific version tags for production deployments.

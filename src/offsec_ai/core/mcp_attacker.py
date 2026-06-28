@@ -169,7 +169,7 @@ class MCPAttacker:
             test_headers = {
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
-                "User-Agent": "offsec-ai/2.0.0",
+                "User-Agent": "offsec-ai/2.0.1",
                 **probe.get("headers", {}),
             }
             triggered = False
@@ -233,7 +233,7 @@ class MCPAttacker:
                 async with httpx.AsyncClient(
                     headers={"Content-Type": "application/json",
                              "Accept": "application/json, text/event-stream",
-                             "User-Agent": "offsec-ai/2.0.0", **headers},
+                             "User-Agent": "offsec-ai/2.0.1", **headers},
                     timeout=timeout,
                 ) as client:
                     resp = await client.post(target, json=payload)
@@ -295,7 +295,7 @@ class MCPAttacker:
                     async with httpx.AsyncClient(
                         headers={"Content-Type": "application/json",
                                  "Accept": "application/json, text/event-stream",
-                                 "User-Agent": "offsec-ai/2.0.0", **headers},
+                                 "User-Agent": "offsec-ai/2.0.1", **headers},
                         timeout=timeout,
                     ) as client:
                         resp = await client.post(target, json=payload)
@@ -356,7 +356,7 @@ class MCPAttacker:
                     async with httpx.AsyncClient(
                         headers={"Content-Type": "application/json",
                                  "Accept": "application/json, text/event-stream",
-                                 "User-Agent": "offsec-ai/2.0.0", **headers},
+                                 "User-Agent": "offsec-ai/2.0.1", **headers},
                         timeout=timeout,
                     ) as client:
                         resp = await client.post(target, json=payload)

@@ -98,7 +98,7 @@ class LLMOwaspScanner:
         async with httpx.AsyncClient(
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": "offsec-ai/2.0.0",
+                "User-Agent": "offsec-ai/2.0.1",
                 **self.headers,
             },
             timeout=self.timeout,

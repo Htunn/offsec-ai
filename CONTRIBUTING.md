@@ -1,6 +1,6 @@
-# Contributing to Simple Port Checker
+# Contributing to offsec-ai
 
-Thank you for your interest in contributing to Simple Port Checker! This guide will help you get started.
+Thank you for your interest in contributing to offsec-ai! This guide will help you get started.
 
 ## Code of Conduct
 
@@ -12,7 +12,7 @@ This project adheres to a code of conduct. By participating, you are expected to
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/yourusername/offsec-ai.git
+   git clone https://github.com/Htunn/offsec-ai.git
    cd offsec-ai
    ```
 
@@ -327,4 +327,4 @@ Contributors will be recognized in:
 - **Release notes** for significant contributions
 - **GitHub contributors** page
 
-Thank you for contributing to Simple Port Checker! 🎉
+Thank you for contributing to offsec-ai! 🎉

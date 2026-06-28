@@ -560,5 +560,6 @@ All existing functionality (port scanning, L7 detection, mTLS, certificate analy
 - cryptography: For certificate handling
 - certifi: For CA bundle management
 
-[Unreleased]: https://github.com/htunn/offsec-ai/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/Htunn/offsec-ai/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/Htunn/offsec-ai/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/htunn/offsec-ai/releases/tag/v2.0.0

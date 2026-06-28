@@ -49,7 +49,7 @@
   <!-- Version badge -->
   <rect x="62" y="94" width="52" height="16" rx="3" fill="#cc000033" stroke="#cc000066" stroke-width="0.8"/>
   <text x="88" y="106" font-family="'Courier New', Courier, monospace" font-size="9"
-        fill="#ff6666" text-anchor="middle">v2.0.0</text>
+        fill="#ff6666" text-anchor="middle">v2.0.1</text>
 
   <!-- Right decorative dots (terminal-like) -->
   <circle cx="470" cy="26" r="5" fill="#ff4444" opacity="0.9"/>

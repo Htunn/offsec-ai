@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-We provide security updates for the following versions of Simple Port Checker:
+We provide security updates for the following versions of offsec-ai:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| 0.1.x   | :x:                |
+| 2.x     | :white_check_mark: |
+| 1.x     | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -15,7 +15,7 @@ We take security vulnerabilities seriously. If you discover a security vulnerabi
 
 ### How to Report
 
-1. **Email**: Send an email to `htunnthuthu.linux@gmail.com` with the subject line "Security Vulnerability in Simple Port Checker"
+1. **Email**: Send an email to `htunnthuthu.linux@gmail.com` with the subject line "Security Vulnerability in offsec-ai"
 2. **Include**: 
    - A description of the vulnerability
    - Steps to reproduce the issue
@@ -38,7 +38,7 @@ We practice responsible disclosure:
 
 ## Security Best Practices
 
-When using Simple Port Checker:
+When using offsec-ai:
 
 1. **Network Scanning**: Only scan networks you own or have explicit permission to test
 2. **Rate Limiting**: Use appropriate timeout and concurrency settings to avoid overwhelming target systems

@@ -97,7 +97,7 @@ class MCPScanner:
             headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
-                "User-Agent": "offsec-ai/2.0.0",
+                "User-Agent": "offsec-ai/2.0.1",
                 **self.headers,
             },
             timeout=self.timeout,
@@ -189,7 +189,7 @@ class MCPScanner:
 
         # Try without any auth header
         no_auth_client = httpx.AsyncClient(
-            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "User-Agent": "offsec-ai/2.0.0"},
+            headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "User-Agent": "offsec-ai/2.0.1"},
             timeout=self.timeout,
         )
         async with no_auth_client:
