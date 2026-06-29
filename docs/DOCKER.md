@@ -2,13 +2,14 @@
 
 🐳 **Official Docker Hub Repository**: [htunnthuthu/offsec-ai](https://hub.docker.com/r/htunnthuthu/offsec-ai)
 
-A comprehensive, lightweight Docker container for network secu## 🔒 Certificate Analy## 🔧 Configuration & Environmentis Featuresity testing, port scanning, L7 protection detection, SSL/TLS certificate analysis, and mTLS authentication testing. Perfect for DevSecOps pipelines, security assessments, and network troubleshooting.
+A comprehensive, lightweight Docker container for network security testing, port scanning, L7 protection detection, SSL/TLS certificate analysis, AI/LLM OWASP scanning, MCP security scanning, and mTLS authentication testing. Perfect for DevSecOps pipelines, security assessments, and network troubleshooting.
 
 ## 📦 Available Tags
 
 | Tag | Description | Size | Architectures |
 |-----|-------------|------|---------------|
 | `latest` | Latest stable release | ~60MB | `linux/amd64`, `linux/arm64` |
+| `v2.0.2` | v2.0.2 — Docker Hub fix, author metadata, docs cleanup | ~60MB | `linux/amd64`, `linux/arm64` |
 | `v2.0.1` | v2.0.1 — logo fix, docs cleanup | ~60MB | `linux/amd64`, `linux/arm64` |
 | `v2.0.0` | v2.0.0 — AI/LLM scanner, MCP scanner, Gemini judge | ~60MB | `linux/amd64`, `linux/arm64` |
 
@@ -510,7 +511,7 @@ make docker-build-no-cache
 make docker-build-multi
 
 # Push to Docker Hub (builds first, then tags + pushes :version and :latest)
-make docker-push                              # uses DOCKER_USERNAME=htunn by default
+make docker-push                              # uses DOCKER_USERNAME=htunnthuthu by default
 make docker-push DOCKER_USERNAME=youruser     # override username
 
 # Full release in one command
@@ -549,5 +550,5 @@ We welcome contributions! Please see our [Contributing Guide](https://github.com
 ---
 
 **Maintainer**: [htunnthuthu](https://github.com/Htunn) (htunnthuthu.linux@gmail.com)  
-**Last Updated**: September 22, 2025  
+**Last Updated**: June 29, 2026  
 **Docker Hub**: [htunnthuthu/offsec-ai](https://hub.docker.com/r/htunnthuthu/offsec-ai)
