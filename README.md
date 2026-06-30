@@ -27,11 +27,20 @@
 
 `offsec-ai` is a Python library and CLI that combines classic network reconnaissance with modern AI/LLM security testing. It probes live AI/LLM endpoints for the [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), scans and actively attacks [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers for known CVEs, and performs full-stack infrastructure security assessments.
 
-> **Legal Notice**: Active attack features (`mcp-attack`, deep mode) require the `--i-have-authorization` flag. Only use against systems you own or have explicit written permission to test.
+> **Legal Notice**: Active attack features (`mcp-attack`, `openclaw-attack`, `k8s-attack`, deep mode) require the `--i-have-authorization` flag. Only use against systems you own or have explicit written permission to test.
 
 ---
 
 ## Features
+
+### New in v2.3.0 — Kubernetes Cluster Security
+
+| Feature | Description |
+|---------|-------------|
+| ☸️ **Kubernetes Scanner** | Five-phase black-box scan of exposed K8s components: kube-apiserver (6443/8080), kubelet (10250/10255), etcd (2379), scheduler, controller-manager, cAdvisor, dashboard |
+| 📋 **OWASP K8s Top 10 (2025)** | Findings mapped to K01–K10; 10+ advisories (`K8S-ADV-###`) + real CVEs (CVE-2018-1002105, CVE-2019-11253, CVE-2020-8558, CVE-2021-25741, CVE-2022-3294) |
+| 🤖 **Optional LLM Judge** | `LLMJudge` triages ambiguous findings and generates remediation advice; rule-based fallback when no API key is set |
+| ⚔️ **Kubernetes Attacker** | Authorized red-team probes: anonymous API reads, kubelet `/exec` command execution, Secret extraction, SelfSubjectAccessReview privilege audit, etcd key dump, cloud metadata SSRF (K08) |
 
 ### New in v2.1.0 — OpenClaw Gateway Security
 
@@ -116,6 +125,11 @@ offsec-ai mcp-attack https://mcp.example.com/mcp --i-have-authorization
 offsec-ai openclaw-scan 192.168.1.10
 offsec-ai openclaw-scan gateway.example.com --port 18789 --tls
 offsec-ai openclaw-attack 192.168.1.10 --i-have-authorization --mode deep
+
+# Kubernetes cluster security
+offsec-ai k8s-scan 192.168.1.100
+offsec-ai k8s-scan k8s.example.com --port 6443 --port 10250 --llm-judge
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization --mode deep
 
 # Infrastructure
 offsec-ai scan example.com
@@ -506,6 +520,137 @@ See [docs/openclaw.md](docs/openclaw.md) for the full guide including remediatio
 
 ---
 
+## Kubernetes Cluster Security
+
+Black-box scanning and authorized red-team testing of exposed Kubernetes cluster components, aligned with the [OWASP Kubernetes Top 10 (2025)](https://owasp.org/www-project-kubernetes-top-ten/). No `kubernetes` SDK or kubeconfig required — all probes are over the network via `httpx`.
+
+### Component Surface
+
+| Component | Default Ports | Key Probes |
+|-----------|--------------|------------|
+| kube-apiserver | 6443, 443, 8080 | `/version`, `/healthz`, `/api`, anon `/api/v1/secrets`/`/pods`, `SelfSubjectAccessReview` |
+| kubelet | 10250 (rw), 10255 (ro) | `/pods`, `/runningpods`, `/stats/summary`, `/spec`; `/exec` `/run` (attack) |
+| etcd | 2379, 2380 | `/version`, `/health`, v2/v3 keys |
+| scheduler / controller-mgr | 10259 / 10257 | `/healthz`, `/metrics` |
+| kube-proxy / cAdvisor | 10249 / 4194 | `/healthz`, metrics |
+| Dashboard | 8001, 30000–32767 | UI accessibility, auth posture |
+
+### OWASP K8s Top 10 Coverage
+
+| ID | Category | Black-box coverage |
+|----|----------|-----------------|
+| K01 | Insecure Workload Configurations | ⚠️ via kubelet `/pods` spec (privileged, hostPath, hostNetwork) |
+| K02 | Overly Permissive Authorization | ⚠️ via anonymous `SelfSubjectAccessReview` (deep mode) |
+| K03 | Secrets Management Failures | ⚠️ via anon apiserver `/api/v1/secrets` + kubelet env exposure |
+| K04 | Lack of Cluster Policy Enforcement | 🔎 informational (admission webhook hints) |
+| K05 | Missing Network Segmentation | 🔎 informational (exposed NodePort / internal services) |
+| K06 | Overly Exposed Components | ✅ PRIMARY — all component ports probed for accessibility |
+| K07 | Misconfigured / Vulnerable Components | ✅ `/version` → CVE match; insecure port 8080 detection |
+| K08 | Cluster → Cloud Lateral Movement | ⚠️ cloud IMDS SSRF probes (deep mode) |
+| K09 | Broken Authentication Mechanisms | ✅ anonymous-auth detection on apiserver + kubelet |
+| K10 | Inadequate Logging and Monitoring | 🔎 informational only |
+
+✅ Full coverage · ⚠️ Partial (deep mode or limited by anon access) · 🔎 Informational
+
+### Advisory Database
+
+| ID | CVE | Severity | Finding |
+|----|-----|----------|---------|
+| K8S-ADV-001 | — | **Critical** | kube-apiserver exposed without authentication |
+| K8S-ADV-002 | — | **Critical** | Kubelet read-write port (10250) exposed without auth |
+| K8S-ADV-003 | — | **High** | Kubelet read-only port (10255) accessible |
+| K8S-ADV-004 | — | **Critical** | etcd accessible without authentication |
+| K8S-ADV-005 | — | Medium | Kubernetes Dashboard exposed without auth |
+| K8S-ADV-006 | — | **High** | Scheduler / controller-manager metrics port exposed |
+| CVE-2018-1002105 | CVE-2018-1002105 | **Critical** | API server privilege escalation via API aggregation |
+| CVE-2019-11253 | CVE-2019-11253 | **High** | API server DoS via malformed YAML/JSON |
+| CVE-2020-8558 | CVE-2020-8558 | **High** | NodePort services reachable via loopback interface |
+| CVE-2021-25741 | CVE-2021-25741 | **High** | Symlink + hardlink in volume path traversal |
+| CVE-2022-3294 | CVE-2022-3294 | **High** | Node address bypass for node restriction admission plugin |
+
+### CLI Usage
+
+```bash
+# Passive scan — probe all default K8s component ports
+offsec-ai k8s-scan 192.168.1.100
+
+# Target specific ports
+offsec-ai k8s-scan k8s.example.com --port 6443 --port 10250
+
+# With authentication header (semi-auth scan)
+offsec-ai k8s-scan k8s.example.com \
+    --header "Authorization: Bearer <token>"
+
+# Enable LLM judge for finding triage and remediation advice
+offsec-ai k8s-scan 192.168.1.100 --llm-judge
+
+# Export JSON report
+offsec-ai k8s-scan 192.168.1.100 --format json --output k8s-scan.json
+
+# Authorized active attack (safe mode — anon reads + RBAC review)
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization
+
+# Deep mode — kubelet /exec, secret extraction, etcd dump, cloud IMDS SSRF
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization --mode deep
+
+# Export attack report
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization \
+    --mode deep --format json --output k8s-attack.json
+```
+
+### Python API
+
+```python
+import asyncio
+from offsec_ai.core.k8s_scanner import K8sScanner
+from offsec_ai.core.k8s_attacker import K8sAttacker
+from offsec_ai.core.llm_judge import LLMJudge
+from offsec_ai.exceptions import AuthorizationRequired
+
+async def main():
+    # Optional LLM judge — auto-detects OPENAI/ANTHROPIC/GEMINI key from env
+    judge = LLMJudge()   # rule-based fallback when no key is set
+
+    # Passive scan
+    scanner = K8sScanner(
+        target="192.168.1.100",
+        ports=[6443, 10250, 2379],
+        judge=judge,
+    )
+    result = await scanner.scan()
+
+    print(f"Kubernetes detected : {result.is_kubernetes}")
+    print(f"Version             : {result.server_info.git_version}")
+    print(f"Exposed components  : {[c.component.value for c in result.exposed_components]}")
+    print(f"OWASP coverage      : {result.owasp_coverage}")
+    print(f"Vulnerabilities     : {len(result.vulnerabilities)}")
+    for v in result.vulnerabilities:
+        print(f"  [{v.severity.value}] {v.owasp_id} {v.vuln_id}: {v.title}")
+        if v.llm_reasoning:
+            print(f"    LLM: {v.llm_reasoning}")
+
+    # Authorized active attack
+    try:
+        attacker = K8sAttacker(authorized=True, judge=judge)
+        report = await attacker.attack(
+            target="192.168.1.100",
+            mode="safe",           # "safe" | "deep"
+            scan_result=result,   # guides attack selection
+        )
+        print(f"Attacks run       : {len(report.attack_results)}")
+        print(f"Succeeded         : {len(report.successful_attacks)}")
+        for r in report.successful_attacks:
+            print(f"  [{r.severity.value}] {r.owasp_id} {r.attack_id}: {r.description}")
+    except AuthorizationRequired as exc:
+        print(exc)
+
+asyncio.run(main())
+```
+
+See [docs/k8s.md](docs/k8s.md) for the full guide including OWASP K8s Top 10 mapping, CVE database, attack sequences, and remediation advice.
+
+---
+
 ## Infrastructure Scanning
 
 ### Port Scanner
@@ -598,6 +743,8 @@ Commands:
   mcp-attack          Perform authorized active testing against an MCP server
   openclaw-scan       Five-phase passive security scan of an OpenClaw AI gateway
   openclaw-attack     Authorized active attack against an OpenClaw gateway
+  k8s-scan            Black-box Kubernetes cluster security scan (OWASP K8s Top 10)
+  k8s-attack          Authorized active red-team attack against Kubernetes components
   scan                Scan target hosts for open ports
   l7-check            Check for L7 protection services (WAF, CDN, etc.)
   full-scan           Port scan + L7 protection detection

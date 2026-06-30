@@ -82,6 +82,15 @@ offsec-ai openclaw-scan gateway.example.com --port 18789 --tls \
 # OpenClaw attacker (requires --i-have-authorization)
 offsec-ai openclaw-attack 192.168.1.10 --i-have-authorization
 offsec-ai openclaw-attack 192.168.1.10 --i-have-authorization --mode deep
+
+# ── Kubernetes cluster security scanner ───────────────────────────────
+offsec-ai k8s-scan 192.168.1.100
+offsec-ai k8s-scan k8s.example.com --port 6443 --port 10250 --llm-judge
+offsec-ai k8s-scan 192.168.1.100 --format json --output k8s-scan.json
+
+# Kubernetes attacker (requires --i-have-authorization)
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization
+offsec-ai k8s-attack 192.168.1.100 --i-have-authorization --mode deep
 ```
 
 ### Python API

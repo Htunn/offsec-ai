@@ -2636,3 +2636,103 @@ from offsec_ai.exceptions import (
 `AuthorizationRequired(module="MyModule")` produces:
 
 > `MyModule requires explicit authorization. Pass authorized=True only when you have written permission to test the target.`
+
+---
+
+## Kubernetes Security Modules
+
+### K8sScanner
+
+```python
+from offsec_ai.core.k8s_scanner import K8sScanner
+
+scanner = K8sScanner(
+    target="192.168.1.100",          # hostname or IP
+    ports=[6443, 10250, 2379],       # default: all well-known K8s ports
+    headers={"Authorization": "Bearer <token>"},  # optional
+    timeout=15.0,
+    judge=LLMJudge(),                # optional — enables finding triage
+)
+result = await scanner.scan()
+```
+
+#### Constructor
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `target` | `str` | — | Hostname or IP of the cluster control plane / node |
+| `ports` | `list[int] \| None` | all K8s ports | Ports to probe |
+| `headers` | `dict[str, str] \| None` | `None` | Extra HTTP headers |
+| `timeout` | `float` | `15.0` | Per-request timeout in seconds |
+| `judge` | `LLMJudge \| None` | `None` | Optional LLM judge for finding triage |
+
+#### `scan()` → `K8sScanResult`
+
+Five-phase scan: component discovery → version/CVE matching → auth posture → exposure/workload audit → OWASP mapping + LLM triage.
+
+#### `K8sScanResult` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_kubernetes` | `bool` | Cluster fingerprint confirmed |
+| `server_info` | `K8sServerInfo` | Version, git_version, platform, components_found |
+| `exposed_components` | `list[K8sExposedComponent]` | Each accessible component with port, anonymous_access, tls |
+| `vulnerabilities` | `list[K8sVulnerability]` | All findings with OWASP ID, severity, evidence, remediation, optional LLM annotations |
+| `cve_matches` | `list[str]` | CVE/advisory IDs matched by version |
+| `owasp_coverage` | `list[str]` | Distinct OWASP K8s Top 10 IDs found (computed property) |
+| `critical_vulns` | `list[K8sVulnerability]` | Filtered critical findings (computed property) |
+| `high_vulns` | `list[K8sVulnerability]` | Filtered high findings (computed property) |
+
+### K8sAttacker
+
+```python
+from offsec_ai.core.k8s_attacker import K8sAttacker
+from offsec_ai.exceptions import AuthorizationRequired
+
+# Authorization required — raises immediately if authorized is not True
+try:
+    attacker = K8sAttacker(authorized=True, judge=LLMJudge())
+    report = await attacker.attack(
+        target="192.168.1.100",
+        ports=[6443, 10250, 2379],   # default: K8S_DEFAULT_SCAN_PORTS
+        mode="deep",                 # "safe" | "deep"
+        scan_result=prior_scan,      # optional — guides attack selection
+        timeout=15.0,
+    )
+    print(f"Succeeded: {len(report.successful_attacks)}")
+    for r in report.successful_attacks:
+        print(f"  [{r.severity.value}] {r.owasp_id} {r.attack_id}: {r.description}")
+except AuthorizationRequired as exc:
+    print(exc)
+```
+
+#### Attack modes
+
+| Mode | Probes |
+|------|--------|
+| `safe` | Anonymous apiserver resource list, kubelet `/pods`, `SelfSubjectAccessReview` RBAC audit, etcd `/health` |
+| `deep` | All safe probes + kubelet `/exec` command execution, anonymous Secret extraction, etcd key dump, cloud IMDS SSRF (AWS/GCP/Azure) |
+
+#### `K8sAttackReport` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attack_results` | `list[K8sAttackResult]` | All probe results |
+| `successful_attacks` | `list[K8sAttackResult]` | Probes where `succeeded=True` (computed property) |
+| `critical_successes` | `list[K8sAttackResult]` | Succeeded + CRITICAL severity (computed property) |
+| `attack_duration` | `float` | Total attack time in seconds |
+
+### Kubernetes Result Models
+
+```python
+from offsec_ai.models.k8s_result import (
+    K8sScanResult,
+    K8sAttackReport,
+    K8sAttackResult,
+    K8sVulnerability,
+    K8sExposedComponent,
+    K8sServerInfo,
+    K8sVulnSeverity,    # CRITICAL / HIGH / MEDIUM / LOW / INFO
+    K8sComponent,       # API_SERVER / KUBELET / ETCD / SCHEDULER / CONTROLLER_MANAGER / KUBE_PROXY / CADVISOR / DASHBOARD
+)
+```

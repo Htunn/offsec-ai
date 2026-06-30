@@ -42,6 +42,8 @@ from .core.openclaw_attacker import OpenClawAttacker
 from .core.llm_conversation_attacker import LLMConversationAttacker
 from .core.guardrail_bench import GuardrailBench
 from .core.llm_judge import LLMJudge
+from .core.k8s_scanner import K8sScanner
+from .core.k8s_attacker import K8sAttacker
 from .exceptions import AuthorizationRequired
 from .models.scan_result import ScanResult, BatchScanResult
 from .models.l7_result import L7Result, BatchL7Result
@@ -53,6 +55,11 @@ from .models.openclaw_result import (
     OpenClawScanResult,
     OpenClawAttackReport,
     OpenClawVulnSeverity,
+)
+from .models.k8s_result import (
+    K8sScanResult,
+    K8sAttackReport,
+    K8sVulnSeverity,
 )
 from .utils.common_ports import TOP_PORTS, get_service_name, get_port_description
 from .utils.exporters import OwaspPdfExporter, export_to_csv, export_to_json
@@ -3349,4 +3356,396 @@ def llm_attack(
             console.print(f"\n[green]Results written to {output}[/green]")
 
     asyncio.run(_run())
+
+
+# ---------------------------------------------------------------------------
+# k8s-scan command
+# ---------------------------------------------------------------------------
+
+@main.command("k8s-scan")
+@click.argument("target")
+@click.option(
+    "--port", "-p", "ports",
+    multiple=True, type=int,
+    help="Port(s) to probe. Can repeat. Defaults to all well-known K8s component ports.",
+)
+@click.option("--header", "extra_headers", multiple=True, metavar="KEY:VALUE",
+              help="Extra HTTP header (repeatable).")
+@click.option("--timeout", default=15.0, show_default=True,
+              help="Per-request timeout in seconds.")
+@click.option("--llm-judge", "use_judge", is_flag=True, default=False,
+              help="Enable LLM judge to triage findings and generate remediation.")
+@click.option("--format", "output_format",
+              type=click.Choice(["console", "json"]), default="console", show_default=True,
+              help="Output format.")
+@click.option("--output", "-o", type=click.Path(),
+              help="Write JSON results to this file.")
+def k8s_scan(
+    target: str,
+    ports: tuple[int, ...],
+    extra_headers: tuple[str, ...],
+    timeout: float,
+    use_judge: bool,
+    output_format: str,
+    output: Optional[str],
+) -> None:
+    """Black-box security scan of exposed Kubernetes cluster components.
+
+    Probes kube-apiserver, kubelet, etcd, scheduler, controller-manager,
+    kube-proxy, cAdvisor, and the Dashboard for anonymous access, CVEs, and
+    OWASP Kubernetes Top 10 (2025) misconfigurations.
+
+    \b
+    Examples:
+      offsec-ai k8s-scan 192.168.1.100
+      offsec-ai k8s-scan k8s.example.com --port 6443 --port 10250
+      offsec-ai k8s-scan 10.0.0.1 --llm-judge --format json --output report.json
+    """
+    async def _run() -> None:
+        headers: dict[str, str] = {}
+        for h in extra_headers:
+            if ":" in h:
+                k, v = h.split(":", 1)
+                headers[k.strip()] = v.strip()
+
+        judge = LLMJudge() if use_judge else None
+        port_list = list(ports) if ports else None
+
+        scanner = K8sScanner(
+            target=target,
+            ports=port_list,
+            headers=headers,
+            timeout=timeout,
+            judge=judge,
+        )
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task(
+                f"Scanning Kubernetes components on {target}…", total=None
+            )
+            result = await scanner.scan()
+            progress.stop_task(task)
+
+        if output_format == "json" or output:
+            data = result.model_dump(mode="json")
+            if output:
+                Path(output).write_text(json.dumps(data, indent=2, default=str))
+                console.print(f"[green]Results saved to {output}[/green]")
+            if output_format == "json":
+                console.print_json(json.dumps(data, default=str))
+            return
+
+        _display_k8s_scan_result(result)
+
+    asyncio.run(_run())
+
+
+def _display_k8s_scan_result(result: "K8sScanResult") -> None:
+    """Render a K8sScanResult to the console."""
+    critical = result.critical_vulns
+    high = result.high_vulns
+    panel_color = "red" if critical else ("yellow" if high else "green")
+
+    # Summary panel
+    components_str = ", ".join(
+        c.value for c in result.server_info.components_found
+    ) or "none detected"
+    console.print(Panel(
+        f"[bold]Target:[/bold] {result.target}\n"
+        f"[bold]Kubernetes Detected:[/bold] {'[green]YES[/green]' if result.is_kubernetes else '[red]NO[/red]'}\n"
+        f"[bold]Version:[/bold] {result.server_info.git_version or 'unknown'}\n"
+        f"[bold]Platform:[/bold] {result.server_info.platform or 'unknown'}\n"
+        f"[bold]Components Found:[/bold] {components_str}\n"
+        f"[bold]Vulnerabilities:[/bold] [red]{len(critical)} critical[/red]  "
+        f"[yellow]{len(high)} high[/yellow]  {len(result.vulnerabilities)} total\n"
+        f"[bold]OWASP Coverage:[/bold] {', '.join(result.owasp_coverage) or 'none'}\n"
+        f"[bold]CVE Matches:[/bold] {', '.join(result.cve_matches) or 'none'}\n"
+        f"[bold]Duration:[/bold] {result.scan_duration:.1f}s",
+        title="[bold cyan]Kubernetes Security Scan[/bold cyan]",
+        border_style=panel_color,
+    ))
+
+    if result.error:
+        console.print(f"[yellow]Warning: {result.error}[/yellow]")
+
+    # Exposed components table
+    accessible = [c for c in result.exposed_components if c.accessible]
+    if accessible:
+        comp_table = Table(
+            title="Exposed Components",
+            show_header=True,
+            header_style="bold blue",
+        )
+        comp_table.add_column("Component", style="cyan")
+        comp_table.add_column("Port", justify="right")
+        comp_table.add_column("TLS", justify="center")
+        comp_table.add_column("Anon Access", justify="center")
+        comp_table.add_column("Version")
+        for c in accessible:
+            anon_str = "[red]YES[/red]" if c.anonymous_access else "[green]NO[/green]"
+            comp_table.add_row(
+                c.component.value,
+                str(c.port),
+                "✓" if c.tls else "✗",
+                anon_str,
+                c.version or "-",
+            )
+        console.print(comp_table)
+
+    # Vulnerabilities table
+    if result.vulnerabilities:
+        sev_color = {
+            K8sVulnSeverity.CRITICAL: "bold red",
+            K8sVulnSeverity.HIGH: "yellow",
+            K8sVulnSeverity.MEDIUM: "orange3",
+            K8sVulnSeverity.LOW: "blue",
+            K8sVulnSeverity.INFO: "dim",
+        }
+        vuln_table = Table(
+            title="Vulnerabilities",
+            show_header=True,
+            header_style="bold magenta",
+            show_lines=True,
+        )
+        vuln_table.add_column("ID", style="cyan", no_wrap=True)
+        vuln_table.add_column("OWASP", justify="center", no_wrap=True)
+        vuln_table.add_column("Severity", justify="center")
+        vuln_table.add_column("Title")
+        for v in sorted(
+            result.vulnerabilities,
+            key=lambda x: list(K8sVulnSeverity).index(x.severity),
+        ):
+            color = sev_color.get(v.severity, "white")
+            vuln_table.add_row(
+                v.vuln_id,
+                v.owasp_id,
+                f"[{color}]{v.severity.value.upper()}[/{color}]",
+                v.title,
+            )
+        console.print(vuln_table)
+
+        # Remediation for critical/high findings
+        for v in result.vulnerabilities:
+            if v.severity in (K8sVulnSeverity.CRITICAL, K8sVulnSeverity.HIGH) and v.remediation:
+                console.print(
+                    f"\n[bold red]{v.vuln_id}[/bold red] — {v.title}\n"
+                    f"  [dim]{v.remediation}[/dim]"
+                )
+
+
+# ---------------------------------------------------------------------------
+# k8s-attack command
+# ---------------------------------------------------------------------------
+
+@main.command("k8s-attack")
+@click.argument("target")
+@click.option(
+    "--port", "-p", "ports",
+    multiple=True, type=int,
+    help="Port(s) to attack. Can repeat. Defaults to all well-known K8s component ports.",
+)
+@click.option(
+    "--mode",
+    type=click.Choice(["safe", "deep"]),
+    default="safe",
+    show_default=True,
+    help="safe: anon reads + RBAC probe. deep: adds kubelet /exec, secret extraction, etcd dump, IMDS.",
+)
+@click.option("--header", "extra_headers", multiple=True, metavar="KEY:VALUE",
+              help="Extra HTTP header (repeatable).")
+@click.option("--timeout", default=15.0, show_default=True,
+              help="Per-request timeout in seconds.")
+@click.option("--llm-judge", "use_judge", is_flag=True, default=False,
+              help="Use LLM judge to generate attack-path narrative.")
+@click.option(
+    "--i-have-authorization", "authorized",
+    is_flag=True, default=False,
+    help="Confirm you have explicit written authorization to test this cluster. Required.",
+)
+@click.option("--format", "output_format",
+              type=click.Choice(["console", "json"]), default="console", show_default=True,
+              help="Output format.")
+@click.option("--output", "-o", type=click.Path(),
+              help="Write JSON results to this file.")
+def k8s_attack(
+    target: str,
+    ports: tuple[int, ...],
+    mode: str,
+    extra_headers: tuple[str, ...],
+    timeout: float,
+    use_judge: bool,
+    authorized: bool,
+    output_format: str,
+    output: Optional[str],
+) -> None:
+    """Authorized active attack against exposed Kubernetes cluster components.
+
+    Probes kube-apiserver, kubelet, and etcd for exploitable misconfigurations
+    mapped to the OWASP Kubernetes Top 10 (2025).
+
+    Requires the --i-have-authorization flag. Safe mode performs read-only probes;
+    deep mode adds kubelet /exec, Secret extraction, etcd key dump, and cloud IMDS.
+
+    \b
+    Examples:
+      offsec-ai k8s-attack 192.168.1.100 --i-have-authorization
+      offsec-ai k8s-attack 10.0.0.1 --i-have-authorization --mode deep
+      offsec-ai k8s-attack 10.0.0.1 --i-have-authorization --mode deep --output attack.json
+    """
+    if not authorized:
+        console.print(
+            "[bold red]⚠  --i-have-authorization flag is required.[/bold red]\n"
+            "Only use this module against Kubernetes clusters you own or have "
+            "explicit written permission to test."
+        )
+        raise SystemExit(1)
+
+    async def _run() -> None:
+        headers: dict[str, str] = {}
+        for h in extra_headers:
+            if ":" in h:
+                k, v = h.split(":", 1)
+                headers[k.strip()] = v.strip()
+
+        judge = LLMJudge() if use_judge else None
+        port_list = list(ports) if ports else None
+
+        # Phase 1: passive scan to guide attacks
+        console.print(f"[cyan]Phase 1: Passive scan of {target}…[/cyan]")
+        scanner = K8sScanner(
+            target=target, ports=port_list, headers=headers, timeout=timeout
+        )
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Scanning…", total=None)
+            scan_result = await scanner.scan()
+            progress.stop_task(task)
+
+        if not scan_result.is_kubernetes:
+            console.print(
+                f"[red]Target {target} does not appear to be a Kubernetes cluster.[/red]"
+            )
+            if scan_result.error:
+                console.print(f"[red]Error: {scan_result.error}[/red]")
+            return
+
+        console.print(
+            f"[green]Kubernetes {scan_result.server_info.git_version or 'cluster'} detected.[/green]"
+        )
+
+        # Phase 2: active attack
+        console.print(f"\n[yellow]Phase 2: Attacking in [{mode.upper()}] mode…[/yellow]")
+
+        try:
+            attacker = K8sAttacker(authorized=True, judge=judge)
+        except AuthorizationRequired as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise SystemExit(1)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task(f"Running {mode} attacks…", total=None)
+            report = await attacker.attack(
+                target=target,
+                ports=port_list,
+                mode=mode,
+                headers=headers,
+                timeout=timeout,
+                scan_result=scan_result,
+            )
+            progress.stop_task(task)
+
+        if output_format == "json" or output:
+            data = report.model_dump(mode="json")
+            if output:
+                Path(output).write_text(json.dumps(data, indent=2, default=str))
+                console.print(f"[green]Results saved to {output}[/green]")
+            if output_format == "json":
+                console.print_json(json.dumps(data, default=str))
+            return
+
+        _display_k8s_attack_report(report)
+
+    asyncio.run(_run())
+
+
+def _display_k8s_attack_report(report: "K8sAttackReport") -> None:
+    """Render a K8sAttackReport to the console."""
+    succeeded = report.successful_attacks
+    critical = report.critical_successes
+    panel_color = "red" if critical else ("yellow" if succeeded else "green")
+
+    console.print(Panel(
+        f"[bold]Target:[/bold] {report.target}\n"
+        f"[bold]Mode:[/bold] {report.mode.upper()}\n"
+        f"[bold]Attacks Run:[/bold] {len(report.attack_results)}\n"
+        f"[bold]Succeeded:[/bold] [{'red' if succeeded else 'green'}]{len(succeeded)}[/{'red' if succeeded else 'green'}]\n"
+        f"[bold]Critical:[/bold] [red]{len(critical)}[/red]\n"
+        f"[bold]Duration:[/bold] {report.attack_duration:.1f}s",
+        title="[bold red]Kubernetes Attack Report[/bold red]",
+        border_style=panel_color,
+    ))
+
+    if not report.attack_results:
+        console.print("[dim]No attacks were executed.[/dim]")
+        return
+
+    sev_color = {
+        K8sVulnSeverity.CRITICAL: "bold red",
+        K8sVulnSeverity.HIGH: "yellow",
+        K8sVulnSeverity.MEDIUM: "orange3",
+        K8sVulnSeverity.LOW: "blue",
+        K8sVulnSeverity.INFO: "dim",
+    }
+
+    atk_table = Table(
+        title="Attack Results",
+        show_header=True,
+        header_style="bold magenta",
+        show_lines=True,
+    )
+    atk_table.add_column("ID", style="cyan", no_wrap=True)
+    atk_table.add_column("OWASP", justify="center", no_wrap=True)
+    atk_table.add_column("Severity", justify="center")
+    atk_table.add_column("Result", justify="center")
+    atk_table.add_column("Description")
+
+    for r in sorted(
+        report.attack_results,
+        key=lambda x: (not x.succeeded, list(K8sVulnSeverity).index(x.severity)),
+    ):
+        color = sev_color.get(r.severity, "white")
+        result_str = (
+            "[bold red]TRIGGERED[/bold red]" if r.succeeded
+            else ("[dim]error[/dim]" if r.error else "[green]clean[/green]")
+        )
+        atk_table.add_row(
+            r.attack_id,
+            r.owasp_id,
+            f"[{color}]{r.severity.value.upper()}[/{color}]",
+            result_str,
+            r.description,
+        )
+    console.print(atk_table)
+
+    for r in succeeded:
+        if r.evidence:
+            console.print(f"\n[bold red]▶ {r.attack_id}[/bold red]: {r.evidence}")
+
 

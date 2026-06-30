@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-06-30
+
+### Added — Kubernetes Cluster Security Scanner and Attacker
+
+- **⎈ Kubernetes Scanner** (`offsec_ai.core.k8s_scanner.K8sScanner`)
+  - Black-box five-phase scan of exposed Kubernetes cluster components over the network
+    (no `kubernetes` SDK, no kubeconfig required)
+  - **Phase 1 — Component Discovery**: probes all well-known K8s component ports
+    (6443/443/8080 apiserver, 10250/10255 kubelet, 2379/2380 etcd, 10259 scheduler,
+    10257 controller-manager, 10249 kube-proxy, 4194 cAdvisor, dashboard NodePorts)
+  - **Phase 2 — Version & CVE Matching**: fingerprints cluster version via `/version`;
+    matches against 11-entry CVE/advisory database covering
+    CVE-2018-1002105, CVE-2019-11253, CVE-2020-8558, CVE-2021-25741, CVE-2022-3294,
+    and `K8S-ADV-001` through `K8S-ADV-006`
+  - **Phase 3 — Auth Posture (K09)**: detects anonymous-auth on apiserver and kubelet;
+    tests unauthenticated access to `/api`, `/healthz`, kubelet `/pods`, etcd `/health`
+  - **Phase 4 — Exposure & Workload Audit (K01/K03/K06)**: reads kubelet `/pods` for
+    privileged containers, `hostPath` mounts, `hostNetwork`/`hostPID` specs; probes
+    apiserver for anonymous `/api/v1/secrets` and `/api/v1/configmaps` access
+  - **Phase 5 — OWASP Map + LLM Triage**: deduplicated findings mapped to K01–K10;
+    optional `LLMJudge` sets `llm_confidence` + `llm_reasoning` on each vulnerability
+    and enriches remediation text
+  - Response body capped at 64 KB per request (`_MAX_RESPONSE_BYTES = 65_536`)
+  - `trust_env=False`, `verify=False` on `httpx.AsyncClient` (consistent with all modules)
+  - CLI command: `offsec-ai k8s-scan`
+
+- **⚔️ Kubernetes Attacker** (`offsec_ai.core.k8s_attacker.K8sAttacker`)
+  - Hard authorization gate: `K8sAttacker(authorized=False)` raises `AuthorizationRequired`;
+    `--i-have-authorization` required at CLI
+  - Accepts optional `judge` (`LLMJudge`) for attack-path narrative generation
+  - **Safe mode** (passive read probes — no destructive operations):
+    anonymous apiserver resource list, kubelet `/pods` enumeration,
+    `SelfSubjectAccessReview` RBAC privilege audit (K02), etcd `/health` probe
+  - **Deep mode** (full suite — adds):
+    kubelet `/exec` command execution (K06), anonymous secret extraction (K03),
+    etcd key dump (K03), cloud IMDS/metadata SSRF probes for AWS/GCP/Azure (K08)
+  - Response body capped at 4 KB per attack request
+  - CLI command: `offsec-ai k8s-attack`
+
+- **New models** (`offsec_ai.models.k8s_result`):
+  `K8sScanResult`, `K8sAttackReport`, `K8sAttackResult`, `K8sVulnerability`,
+  `K8sExposedComponent`, `K8sServerInfo`, `K8sVulnSeverity`, `K8sComponent`
+
+- **New utilities**:
+  - `offsec_ai.utils.k8s_cve_db` — `K8sCVEEntry` dataclass, `K8S_CVE_DB` (11 entries),
+    `match_cves(version, accessible_components)` with component-boundary-safe version matching
+  - `offsec_ai.utils.k8s_payloads` — `K8S_DEFAULT_SCAN_PORTS`, `K8S_COMPONENT_PORTS`,
+    `APISERVER_PROBE_PATHS`, `KUBELET_PROBE_PATHS`, `ETCD_PROBE_PATHS`,
+    `ANONYMOUS_API_PATHS`, `K8S_FINGERPRINTS`, `KUBELET_EXEC_PAYLOADS`,
+    `CLOUD_METADATA_PAYLOADS`, `SELF_SUBJECT_REVIEW_PAYLOAD`
+
+- **Tests**: 43 new tests in `tests/test_k8s_scanner.py` and `tests/test_k8s_attacker.py`
+  covering CVE DB integrity and version matching, payload structure, result model properties,
+  component fingerprinting (positive/negative), version/CVE detection, anonymous-auth detection,
+  secret/workload exposure, LLM judge wiring, attacker authorization gating, safe vs deep mode,
+  and JSON serialization — 238 tests total (up from 195)
+
+### Changed
+- `src/offsec_ai/cli.py`: added `k8s-scan` and `k8s-attack` commands with `--port` (multiple),
+  `--header`, `--timeout`, `--llm-judge`, `--format`, `--output` options; `k8s-attack`
+  additionally requires `--i-have-authorization` and `--mode safe|deep`
+- `src/offsec_ai/__init__.py`: exported `K8sScanner`, `K8sAttacker`, `K8sScanResult`,
+  `K8sAttackReport`, `K8sVulnerability`, `K8sComponent`, `K8sVulnSeverity`
+- `pyproject.toml`: version bumped `2.2.0` → `2.3.0`
+
+---
+
 ## [2.2.0] - 2026-06-30
 
 ### Added — AI/LLM Attack Expansion (Track A)

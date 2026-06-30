@@ -11,7 +11,11 @@ Capabilities:
 - AI/LLM OWASP Top 10 2025 black-box endpoint probing
 - MCP (Model Context Protocol) endpoint security scanning and CVE matching
 - MCP endpoint active attack module (requires explicit authorization)
+- Kubernetes cluster black-box security scanner (OWASP K8s Top 10 2025)
+- Kubernetes attacker module for authorized red-team engagements
 - OpenClaw personal AI gateway security scanner and attacker
+- Kubernetes cluster black-box security scanner (OWASP K8s Top 10 2025)
+- Kubernetes attacker module for authorized red-team engagements
 - Security header analysis and grading
 - Multi-format reporting (PDF, JSON, CSV)
 - Rich CLI interface with progress bars
@@ -67,6 +71,18 @@ from .models.mcp_result import (
     MCPAttackReport,
     MCPAttackResult,
     MCPTransport,
+)
+from .core.k8s_scanner import K8sScanner
+from .core.k8s_attacker import K8sAttacker
+from .models.k8s_result import (
+    K8sScanResult,
+    K8sAttackReport,
+    K8sAttackResult,
+    K8sVulnerability,
+    K8sVulnSeverity,
+    K8sComponent,
+    K8sExposedComponent,
+    K8sServerInfo,
 )
 
 __all__ = [
@@ -125,4 +141,16 @@ __all__ = [
     "MCPAttackReport",
     "MCPAttackResult",
     "MCPTransport",
+    # Kubernetes modules
+    "K8sScanner",
+    "K8sAttacker",
+    # Kubernetes result models
+    "K8sScanResult",
+    "K8sAttackReport",
+    "K8sAttackResult",
+    "K8sVulnerability",
+    "K8sVulnSeverity",
+    "K8sComponent",
+    "K8sExposedComponent",
+    "K8sServerInfo",
 ]
