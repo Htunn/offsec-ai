@@ -49,6 +49,8 @@ dependencies = [
     "mcp>=1.0.0",
     "httpx>=0.25.0",
     "reportlab>=4.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +64,11 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.5.0",
     "pre-commit>=3.4.0",
+    "ruff>=0.4.0",
+    "bandit[toml]>=1.7.0",
+    "detect-secrets>=1.4.0",
+    "pip-audit>=2.7.0",
+    "types-requests>=2.31.0",
 ]
 ai = [
     "openai>=1.0.0",
@@ -141,6 +148,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: marks tests that call live network services (deselect with -m 'not integration')",
+    "slow: marks tests that take more than 5 seconds",
+    "security: marks tests that probe for security vulnerabilities",
+    "network: marks tests that require network connectivity",
+]
 
 [tool.coverage.run]
 source = ["src/offsec_ai"]
@@ -152,4 +167,43 @@ exclude_lines = [
     "def __repr__",
     "raise AssertionError",
     "raise NotImplementedError",
+]
+fail_under = 60
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit (security)
+    "N",    # pep8-naming
+]
+ignore = [
+    "S101",  # assert used (OK in tests)
+    "S501",  # requests without verify=True (intentional in security scanners)
+    "S105",  # hardcoded password (false positives in payload strings)
+    "S106",  # hardcoded password in function args
+    "B008",  # do not perform function calls in default arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "N"]     # relax security and naming in tests
+"examples/**" = ["S", "T"]  # relax in examples
+
+[tool.bandit]
+exclude_dirs = ["tests", "examples", ".venv"]
+skips = [
+    "B101",  # assert_used — OK in tests
+    "B603",  # subprocess_without_shell_equals_true — intentional in port scanner
+    "B501",  # requests with verify=False — intentional in security scanners
+    "B105",  # hardcoded_password_string — false positives in payload strings
+    "B106",  # hardcoded_password_funcarg
 ]

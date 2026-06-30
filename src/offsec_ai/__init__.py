@@ -11,13 +11,20 @@ Capabilities:
 - AI/LLM OWASP Top 10 2025 black-box endpoint probing
 - MCP (Model Context Protocol) endpoint security scanning and CVE matching
 - MCP endpoint active attack module (requires explicit authorization)
+- OpenClaw personal AI gateway security scanner and attacker
 - Security header analysis and grading
 - Multi-format reporting (PDF, JSON, CSV)
 - Rich CLI interface with progress bars
 """
 
-__version__ = "2.0.2"
-__author__ = "htunn"
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
+try:
+    __version__ = _pkg_version("offsec-ai")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "unknown"
+
+__author__ = "Johny htunn"
 __email__ = "htunnthuthu.linux@gmail.com"
 __license__ = "MIT"
 
@@ -30,8 +37,23 @@ from .core.owasp_scanner import OwaspScanner
 from .core.security_headers import SecurityHeaderChecker
 from .core.ai_owasp_scanner import LLMOwaspScanner
 from .core.mcp_scanner import MCPScanner
-from .core.mcp_attacker import MCPAttacker, AuthorizationRequired
+from .core.mcp_attacker import MCPAttacker
 from .core.llm_judge import LLMJudge
+from .exceptions import (
+    AuthorizationRequired,
+    ConfigError,
+    NetworkError,
+    OffsecError,
+    ScanError,
+    TargetUnreachableError,
+)
+from .config import OffsecConfig, get_config, reset_config
+from .log_config import (
+    configure_logging,
+    new_correlation_id,
+    get_correlation_id,
+    audit_log,
+)
 from .models.scan_result import ScanResult, PortResult
 from .models.l7_result import L7Result
 from .models.mtls_result import MTLSResult, CertificateInfo
@@ -64,7 +86,22 @@ __all__ = [
     # New MCP modules
     "MCPScanner",
     "MCPAttacker",
+    # Exceptions
+    "OffsecError",
+    "ScanError",
+    "ConfigError",
+    "NetworkError",
+    "TargetUnreachableError",
     "AuthorizationRequired",
+    # Configuration
+    "OffsecConfig",
+    "get_config",
+    "reset_config",
+    # Logging utilities
+    "configure_logging",
+    "new_correlation_id",
+    "get_correlation_id",
+    "audit_log",
     # Original result models
     "ScanResult",
     "PortResult",

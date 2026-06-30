@@ -35,6 +35,8 @@ from ..utils.mcp_payloads import (
     TOOL_INJECTION_PAYLOADS,
 )
 
+from ..exceptions import AuthorizationRequired
+
 logger = logging.getLogger(__name__)
 
 AUTHORIZATION_BANNER = """
@@ -48,10 +50,6 @@ AUTHORIZATION_BANNER = """
 ║  The authors assume no liability for unauthorized use.               ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
-
-
-class AuthorizationRequired(RuntimeError):
-    """Raised when attack is attempted without explicit authorization."""
 
 
 class MCPAttacker:
@@ -175,7 +173,7 @@ class MCPAttacker:
             triggered = False
             response_text = ""
             try:
-                async with httpx.AsyncClient(headers=test_headers, timeout=timeout) as client:
+                async with httpx.AsyncClient(headers=test_headers, timeout=timeout, trust_env=False) as client:
                     resp = await client.post(target, json=init_payload)
                     response_text = resp.text[:500]
                     if probe.get("detect") == "http_200" and resp.status_code == 200:
@@ -235,6 +233,7 @@ class MCPAttacker:
                              "Accept": "application/json, text/event-stream",
                              "User-Agent": "offsec-ai/2.0.1", **headers},
                     timeout=timeout,
+                    trust_env=False,
                 ) as client:
                     resp = await client.post(target, json=payload)
                     response_text = resp.text[:1000]
@@ -297,6 +296,7 @@ class MCPAttacker:
                                  "Accept": "application/json, text/event-stream",
                                  "User-Agent": "offsec-ai/2.0.1", **headers},
                         timeout=timeout,
+                        trust_env=False,
                     ) as client:
                         resp = await client.post(target, json=payload)
                         response_text = resp.text[:500]
@@ -358,6 +358,7 @@ class MCPAttacker:
                                  "Accept": "application/json, text/event-stream",
                                  "User-Agent": "offsec-ai/2.0.1", **headers},
                         timeout=timeout,
+                        trust_env=False,
                     ) as client:
                         resp = await client.post(target, json=payload)
                         response_text = resp.text[:500]

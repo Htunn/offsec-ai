@@ -101,6 +101,7 @@ class MCPScanner:
                 **self.headers,
             },
             timeout=self.timeout,
+            trust_env=False,
         ) as client:
             # 1. Initialize handshake
             server_info, init_error = await self._initialize_http(client)
@@ -191,6 +192,7 @@ class MCPScanner:
         no_auth_client = httpx.AsyncClient(
             headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "User-Agent": "offsec-ai/2.0.1"},
             timeout=self.timeout,
+            trust_env=False,
         )
         async with no_auth_client:
             try:

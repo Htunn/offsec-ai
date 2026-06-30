@@ -9,6 +9,13 @@
 ```
 
 <p align="center">
+  <a href="https://github.com/Htunn/offsec-ai/actions/workflows/test.yml"><img src="https://github.com/Htunn/offsec-ai/actions/workflows/test.yml/badge.svg?branch=develop" alt="Test and Build"/></a>
+  <a href="https://github.com/Htunn/offsec-ai/actions/workflows/publish.yml"><img src="https://github.com/Htunn/offsec-ai/actions/workflows/publish.yml/badge.svg" alt="Publish to PyPI"/></a>
+  <a href="https://github.com/Htunn/offsec-ai/actions/workflows/docker.yml"><img src="https://github.com/Htunn/offsec-ai/actions/workflows/docker.yml/badge.svg" alt="Docker Build"/></a>
+  <a href="https://github.com/Htunn/offsec-ai/actions/workflows/codeql.yml"><img src="https://github.com/Htunn/offsec-ai/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"/></a>
+</p>
+
+<p align="center">
   <a href="https://pypi.org/project/offsec-ai/"><img src="https://img.shields.io/pypi/v/offsec-ai" alt="PyPI Version"/></a>
   <a href="https://pypistats.org/packages/offsec-ai"><img src="https://img.shields.io/pypi/dm/offsec-ai" alt="PyPI Downloads"/></a>
   <a href="https://pypi.org/project/offsec-ai/"><img src="https://img.shields.io/pypi/pyversions/offsec-ai" alt="Python Version"/></a>

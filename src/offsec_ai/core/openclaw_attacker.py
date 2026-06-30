@@ -35,6 +35,8 @@ from ..utils.openclaw_payloads import (
     WEBSOCKET_PROBE_PATHS,
 )
 
+from ..exceptions import AuthorizationRequired
+
 logger = logging.getLogger(__name__)
 
 AUTHORIZATION_BANNER = """
@@ -48,10 +50,6 @@ AUTHORIZATION_BANNER = """
 ║  The authors assume no liability for unauthorized use.               ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
-
-
-class AuthorizationRequired(RuntimeError):
-    """Raised when attack is attempted without explicit authorization."""
 
 
 class OpenClawAttacker:
