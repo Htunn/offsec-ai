@@ -30,6 +30,14 @@ offsec-ai mcp-scan https://mcp.example.com/mcp --output report.json
 
 # MCP attacker (requires --i-have-authorization flag)
 offsec-ai mcp-attack https://mcp.example.com/mcp --i-have-authorization
+
+# OpenClaw gateway scanner (passive)
+offsec-ai openclaw-scan 192.168.1.10
+offsec-ai openclaw-scan gateway.example.com --port 18789 --tls --format json --output report.json
+
+# OpenClaw attacker (requires --i-have-authorization flag)
+offsec-ai openclaw-attack 192.168.1.10 --i-have-authorization
+offsec-ai openclaw-attack 192.168.1.10 --i-have-authorization --mode deep
 ```
 
 ### Python API
@@ -40,6 +48,8 @@ from offsec_ai import (
     PortChecker, L7Detector, CertificateAnalyzer, MTLSChecker,
     LLMOwaspScanner, MCPScanner, MCPAttacker, LLMJudge,
 )
+from offsec_ai.core.openclaw_scanner import OpenClawScanner
+from offsec_ai.core.openclaw_attacker import OpenClawAttacker
 
 async def main():
     # Infrastructure: port scanning
@@ -66,6 +76,19 @@ async def main():
     mcp_result = await mcp.scan()
     print(f"MCP tools exposed: {len(mcp_result.tools)}")
     print(f"Auth required: {mcp_result.auth_posture.requires_auth}")
+
+    # OpenClaw gateway scan (passive)
+    ocl_scanner = OpenClawScanner(target="192.168.1.10", port=18789)
+    ocl_result = await ocl_scanner.scan()
+    if ocl_result.is_openclaw:
+        print(f"OpenClaw {ocl_result.server_info.version} — "
+              f"{len(ocl_result.critical_vulns)} critical, "
+              f"{len(ocl_result.high_vulns)} high")
+
+    # OpenClaw active attack (authorized=True required)
+    attacker = OpenClawAttacker(authorized=True)
+    attack_report = await attacker.attack(target="192.168.1.10", mode="deep")
+    print(f"Successful attacks: {len(attack_report.successful_attacks)}")
 
 asyncio.run(main())
 ```
