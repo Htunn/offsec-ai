@@ -5,6 +5,238 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-07-01
+
+### Added — LLM Judge Integration Across All Tools
+
+- **LLM Judge** wired into MCP scanner (`mcp-scan`) and attacker (`mcp-attack`):
+  - `MCPScanner(judge=judge)` — Phase 5 LLM triage upgrades LOW→MEDIUM findings when `llm_confidence > 0.7`
+  - `MCPAttacker(authorized=True, judge=judge)` — `_enrich_with_llm()` appends LLM analysis to triggered attack results
+  - New fields on `MCPVulnerability`: `llm_confidence: float | None`, `llm_reasoning: str`
+
+- **LLM Judge** wired into OpenClaw scanner (`openclaw-scan`) and attacker (`openclaw-attack`):
+  - `OpenClawScanner(judge=judge)` — Phase 6 LLM triage (new phase) upgrades LOW→MEDIUM findings when `llm_confidence > 0.7`
+  - `OpenClawAttacker(authorized=True, judge=judge)` — `_enrich_with_llm()` appends LLM analysis to attack results
+  - New fields on `OpenClawVulnerability`: `llm_confidence: float | None`, `llm_reasoning: str`
+
+- `--llm-judge` CLI flag added to `mcp-scan`, `mcp-attack`, `openclaw-scan`, `openclaw-attack`
+  (k8s and ai-owasp-scan already had it; all 7 commands now consistent)
+
+### Changed
+
+- **Removed Azure OpenAI support** — `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` no longer
+  detected; `_evaluate_azure()` removed from `LLMJudge`
+- **Provider priority order changed**: Gemini (highest) → Anthropic → OpenAI (lowest)
+  - `_detect_provider()` now checks `GEMINI_API_KEY` first, then `ANTHROPIC_API_KEY`, then `OPENAI_API_KEY`
+  - Docstring and all CLI `--llm-judge` help text updated to reflect new priority
+- `--judge` flag on `ai-owasp-scan` renamed to `--llm-judge` for consistency across all commands
+- All warning messages updated to list providers as: `GEMINI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY`
+- `pyproject.toml`: version bumped `2.3.0` → `2.4.0`
+- `README.md`, `docs/k8s.md`, `docs/openclaw.md`, `docs/owasp-scanner.md` updated with new
+  provider priority order, `--llm-judge` flag on all commands, and Gemini examples
+
+---
+
+## [2.3.0] - 2026-06-30
+
+### Added — Kubernetes Cluster Security Scanner and Attacker
+
+- **⎈ Kubernetes Scanner** (`offsec_ai.core.k8s_scanner.K8sScanner`)
+  - Black-box five-phase scan of exposed Kubernetes cluster components over the network
+    (no `kubernetes` SDK, no kubeconfig required)
+  - **Phase 1 — Component Discovery**: probes all well-known K8s component ports
+    (6443/443/8080 apiserver, 10250/10255 kubelet, 2379/2380 etcd, 10259 scheduler,
+    10257 controller-manager, 10249 kube-proxy, 4194 cAdvisor, dashboard NodePorts)
+  - **Phase 2 — Version & CVE Matching**: fingerprints cluster version via `/version`;
+    matches against 11-entry CVE/advisory database covering
+    CVE-2018-1002105, CVE-2019-11253, CVE-2020-8558, CVE-2021-25741, CVE-2022-3294,
+    and `K8S-ADV-001` through `K8S-ADV-006`
+  - **Phase 3 — Auth Posture (K09)**: detects anonymous-auth on apiserver and kubelet;
+    tests unauthenticated access to `/api`, `/healthz`, kubelet `/pods`, etcd `/health`
+  - **Phase 4 — Exposure & Workload Audit (K01/K03/K06)**: reads kubelet `/pods` for
+    privileged containers, `hostPath` mounts, `hostNetwork`/`hostPID` specs; probes
+    apiserver for anonymous `/api/v1/secrets` and `/api/v1/configmaps` access
+  - **Phase 5 — OWASP Map + LLM Triage**: deduplicated findings mapped to K01–K10;
+    optional `LLMJudge` sets `llm_confidence` + `llm_reasoning` on each vulnerability
+    and enriches remediation text
+  - Response body capped at 64 KB per request (`_MAX_RESPONSE_BYTES = 65_536`)
+  - `trust_env=False`, `verify=False` on `httpx.AsyncClient` (consistent with all modules)
+  - CLI command: `offsec-ai k8s-scan`
+
+- **⚔️ Kubernetes Attacker** (`offsec_ai.core.k8s_attacker.K8sAttacker`)
+  - Hard authorization gate: `K8sAttacker(authorized=False)` raises `AuthorizationRequired`;
+    `--i-have-authorization` required at CLI
+  - Accepts optional `judge` (`LLMJudge`) for attack-path narrative generation
+  - **Safe mode** (passive read probes — no destructive operations):
+    anonymous apiserver resource list, kubelet `/pods` enumeration,
+    `SelfSubjectAccessReview` RBAC privilege audit (K02), etcd `/health` probe
+  - **Deep mode** (full suite — adds):
+    kubelet `/exec` command execution (K06), anonymous secret extraction (K03),
+    etcd key dump (K03), cloud IMDS/metadata SSRF probes for AWS/GCP/Azure (K08)
+  - Response body capped at 4 KB per attack request
+  - CLI command: `offsec-ai k8s-attack`
+
+- **New models** (`offsec_ai.models.k8s_result`):
+  `K8sScanResult`, `K8sAttackReport`, `K8sAttackResult`, `K8sVulnerability`,
+  `K8sExposedComponent`, `K8sServerInfo`, `K8sVulnSeverity`, `K8sComponent`
+
+- **New utilities**:
+  - `offsec_ai.utils.k8s_cve_db` — `K8sCVEEntry` dataclass, `K8S_CVE_DB` (11 entries),
+    `match_cves(version, accessible_components)` with component-boundary-safe version matching
+  - `offsec_ai.utils.k8s_payloads` — `K8S_DEFAULT_SCAN_PORTS`, `K8S_COMPONENT_PORTS`,
+    `APISERVER_PROBE_PATHS`, `KUBELET_PROBE_PATHS`, `ETCD_PROBE_PATHS`,
+    `ANONYMOUS_API_PATHS`, `K8S_FINGERPRINTS`, `KUBELET_EXEC_PAYLOADS`,
+    `CLOUD_METADATA_PAYLOADS`, `SELF_SUBJECT_REVIEW_PAYLOAD`
+
+- **Tests**: 43 new tests in `tests/test_k8s_scanner.py` and `tests/test_k8s_attacker.py`
+  covering CVE DB integrity and version matching, payload structure, result model properties,
+  component fingerprinting (positive/negative), version/CVE detection, anonymous-auth detection,
+  secret/workload exposure, LLM judge wiring, attacker authorization gating, safe vs deep mode,
+  and JSON serialization — 238 tests total (up from 195)
+
+### Changed
+- `src/offsec_ai/cli.py`: added `k8s-scan` and `k8s-attack` commands with `--port` (multiple),
+  `--header`, `--timeout`, `--llm-judge`, `--format`, `--output` options; `k8s-attack`
+  additionally requires `--i-have-authorization` and `--mode safe|deep`
+- `src/offsec_ai/__init__.py`: exported `K8sScanner`, `K8sAttacker`, `K8sScanResult`,
+  `K8sAttackReport`, `K8sVulnerability`, `K8sComponent`, `K8sVulnSeverity`
+- `pyproject.toml`: version bumped `2.2.0` → `2.3.0`
+
+---
+
+## [2.2.0] - 2026-06-30
+
+### Added — AI/LLM Attack Expansion (Track A)
+
+- **🗡️ Jailbreak Technique Library** (`offsec_ai.utils.llm_jailbreaks`)
+  - DAN (Do Anything Now) variants, developer-mode bypass, roleplay/persona injection,
+    refusal-suppression patterns, hypothetical framing, payload-splitting
+  - Each technique carries OWASP LLM category refs, expected severity, and response detection strings
+  - Constants: `DAN_TECHNIQUES`, `ROLEPLAY_TECHNIQUES`, `REFUSAL_SUPPRESSION_TECHNIQUES`,
+    `HYPOTHETICAL_TECHNIQUES`, `PAYLOAD_SPLITTING_TECHNIQUES`, `JAILBREAK_TECHNIQUES` (combined)
+
+- **🔠 Encoding/Obfuscation Bypass Engine** (`offsec_ai.utils.llm_encoders`)
+  - Encodes payloads in base64, ROT-13, leetspeak, hex, reversed text, homoglyph, zero-width Unicode
+  - `encode(payload, method)` — encode a string in the given representation
+  - `wrap(payload, method)` — produce a complete prompt asking the model to decode-and-execute
+  - `detect_bypass(response, payload)` — heuristic to detect if a model decoded and acted on the payload
+  - `ENCODING_METHODS` — list of all available method names
+
+- **💬 Multi-Turn Conversation Attacker** (`offsec_ai.core.llm_conversation_attacker`)
+  - Requires `authorized=True`; prints legal authorization banner on every instantiation
+  - Attack patterns: **crescendo** (gradual escalation), **many-shot** (in-context few-shot jailbreak),
+    **context-priming** (false context injection), **goal-hijack** (incremental goal redefinition)
+  - `attack(endpoint, mode, ...)` returns `MultiTurnAttackResult` with full conversation transcript,
+    turn-by-turn analysis, escalation detection, and audit trail
+
+- **📊 Guardrail Benchmarker** (`offsec_ai.core.guardrail_bench`)
+  - Maps which OWASP LLM categories are blocked vs. passed by the target's content filter
+  - Produces a per-category block rate and overall `GuardrailBenchResult` with a letter grade
+  - Distinguishes between hard blocks (no response), soft refusals, and compliant responses
+
+- **⚔️ Active LLM Attack CLI** (`offsec-ai llm-attack`)
+  - Requires `--i-have-authorization`; authorization gate identical to `mcp-attack`/`openclaw-attack`
+  - Modes: `jailbreak` · `encoding` · `multiturn` · `agentic` · `guardrail` · `all`
+  - Safe mode — informational payload report (no auto-execution)
+  - Deep mode — actively sends attack payloads and reports results
+  - New models: `LLMAttackResult`, `LLMAttackReport` (`offsec_ai.models.llm_attack_result`)
+
+- **Extended `LLMOwaspScanner`** — jailbreak and encoding payloads are now plugged into the
+  deep-mode scanning pipeline alongside the existing 22 OWASP probes
+
+### Added — Enterprise-Grade Hardening (Track B)
+
+- **🏗️ Exception Hierarchy** (`offsec_ai.exceptions`)
+  - `OffsecError` — base class for all package exceptions
+  - `ScanError` — unexpected scan-operation failures
+  - `ConfigError` — invalid/missing configuration at startup
+  - `NetworkError` — DNS, connection, timeout failures
+  - `TargetUnreachableError` — target unreachable after all retries (subclass of `NetworkError`)
+  - `AuthorizationRequired` — consolidated single class (replaces duplicate definitions in
+    `mcp_attacker` and `openclaw_attacker`)
+
+- **⚙️ Centralised Config** (`offsec_ai.config`)
+  - `OffsecConfig(BaseSettings)` — pydantic-settings v2, validated at import time
+  - `SecretStr` for all API keys — never serialised or printed as plain text
+  - `.env` file support via `python-dotenv`
+  - All `OFFSEC_*` env vars: timeout, concurrency, retries, log level, log format, audit log path
+  - `get_config()` returns a cached singleton; `reset_config()` for test isolation
+
+- **📋 Structured Logging** (`offsec_ai.log_config`)
+  - `configure_logging(level, fmt)` — central setup; `fmt="json"` emits newline-delimited JSON
+  - `JsonFormatter` — includes `timestamp`, `level`, `logger`, `correlation_id`, `message`, plus
+    all extra fields passed to the log call
+  - `new_correlation_id()` / `get_correlation_id()` — `contextvars`-based async-safe correlation IDs
+    so all log lines from a single scan/attack share the same ID
+  - `audit_log(event, **fields)` — dedicated audit logger; always JSON; optionally rotated to file
+    via `OFFSEC_AUDIT_LOG_FILE`; records every authorized attack invocation
+
+- **Quality Gates**
+  - `pyproject.toml`: ruff linter/formatter configuration added; pytest markers registered
+    (`integration`, `slow`, `security`, `network`); `pydantic-settings` and `python-dotenv`
+    added as core dependencies
+  - `Makefile`: `ruff`, `bandit`, `audit` (pip-audit) targets; `ci` target updated
+
+- **CI/CD Security Scanning**
+  - `.github/workflows/test.yml`: `pip-audit` (dependency CVEs), `bandit` (SAST), `detect-secrets`
+    steps added to every test run
+  - `.pre-commit-config.yaml`: `ruff`, `bandit`, `detect-secrets` hooks added
+  - `.github/dependabot.yml`: automated dependency updates for pip and GitHub Actions
+  - `.secrets.baseline`: detect-secrets baseline committed
+
+- **CodeQL** (`.github/workflows/codeql.yml`) — restored for public repo; Python + Actions scanning
+  on push/PR/weekly schedule
+
+### Fixed
+
+- `httpx.AsyncClient` in all four scanners/attackers now sets `trust_env=False` to prevent
+  ambient SOCKS/HTTP proxies from the environment leaking into scan connections
+- `mcp-scan` CLI: added `--no-tls-verify` flag for self-signed/internal CA certificates
+  (e.g. `mcp.simpleportchecker.com` uses a Cloudflare internal CA)
+- `reportlab` added as explicit venv dependency (was declared in `pyproject.toml` but not
+  installed in the manually-created venv, causing `test_cli_mtls_commands_exist` to fail)
+
+### Tests
+
+- 195 tests passing (up from 63 in v2.1.0)
+- `tests/test_enterprise_features.py` — covers exceptions hierarchy, config validation,
+  logging/correlation IDs, jailbreak payload structure, encoding round-trips, multi-turn
+  attacker authorization gate, guardrail bench result model
+
+## [2.1.0] - 2026-06-30
+
+### Added — OpenClaw Gateway Security Assessment
+
+- **🦀 OpenClaw Scanner** (`offsec_ai.core.openclaw_scanner.OpenClawScanner`)
+  - Fingerprints OpenClaw personal AI assistant gateway deployments (default port 18789)
+  - Five-phase scan: fingerprint → endpoint enumeration → auth posture → configuration → CVE matching
+  - Detects unauthenticated REST API access, open DM policy, disabled sandbox, unauthenticated WebSocket upgrades, health endpoint disclosure, session history exposure, API key leakage
+  - Response body capped at 64 KB per request to prevent memory issues with binary/large payloads
+  - `trust_env=False` on httpx client to prevent ambient proxy interference
+  - CLI command: `offsec-ai openclaw-scan`
+
+- **⚔️ OpenClaw Attacker** (`offsec_ai.core.openclaw_attacker.OpenClawAttacker`)
+  - Active red-team probe suite for authorized security assessments
+  - Hard authorization gate: `OpenClawAttacker(authorized=False)` raises `AuthorizationRequired`; `--i-have-authorization` required at CLI
+  - **Safe mode**: unauthenticated API endpoint probes across all known `/api/v1/*` paths
+  - **Deep mode**: adds message injection, WebSocket upgrade probes, SSRF via webhook endpoint, and an informational prompt-injection payload report (payloads listed but not auto-executed to avoid unintended model manipulation)
+  - Response body capped at 4 KB per attack request
+  - CLI command: `offsec-ai openclaw-attack`
+
+- **New models** (`offsec_ai.models.openclaw_result`): `OpenClawScanResult`, `OpenClawAttackReport`, `OpenClawAttackResult`, `OpenClawVulnerability`, `OpenClawServerInfo`, `OpenClawAuthPosture`, `OpenClawDMPolicy`, `OpenClawSandboxInfo`, `OpenClawAccessibleEndpoint`, `OpenClawVulnSeverity`
+
+- **New utilities**:
+  - `offsec_ai.utils.openclaw_cve_db` — 10 OpenClaw-specific advisories (OCL-ADV-001 through OCL-ADV-010) covering critical through informational severity; `match_cves()` path and version filter function; `OPENCLAW_FINGERPRINTS`, `OPENCLAW_PROBE_PATHS`, `OPENCLAW_API_PATHS`
+  - `offsec_ai.utils.openclaw_payloads` — `DM_PROMPT_INJECTION_PAYLOADS`, `API_AUTH_BYPASS_PAYLOADS`, `MESSAGE_INJECTION_PAYLOADS`, `SSRF_WEBHOOK_PAYLOADS`, `WEBSOCKET_PROBE_PATHS`
+
+- **Tests**: 63 new tests in `tests/test_openclaw.py` covering CVE DB integrity, payload structure, result model properties, scanner fingerprinting (positive/negative), endpoint enumeration, auth posture detection, configuration parsing, vulnerability matching, attacker authorization gating, API probes (safe mode), deep-mode attacks, and full scan-then-attack end-to-end flow — all passing
+
+### Changed
+- `pyproject.toml`: description updated to include "OpenClaw gateway security assessment"; keywords updated with `"openclaw"`, `"ai-gateway"`, `"personal-ai"`
+- `src/offsec_ai/cli.py`: added `openclaw-scan` and `openclaw-attack` commands with `--port`, `--tls`, `--header`, `--timeout`, `--format`, `--output` options; `openclaw-attack` additionally requires `--i-have-authorization` and `--mode safe|deep`
+- `docs/api.md`: new **OpenClaw Gateway Security** section with full API reference, advisory table, CLI examples, and scan-then-attack workflow example
+- Removed `sonar-project.properties` and `.github/workflows/sonarcloud.yml` (SonarCloud integration disabled)
+
 ## [2.0.2] - 2026-06-29
 
 ### Changed

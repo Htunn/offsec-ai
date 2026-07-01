@@ -31,13 +31,25 @@ jobs:
           flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
 
+      - name: Lint with ruff
+        run: |
+          ruff check src/ tests/
+
+      - name: Security scan with bandit
+        run: |
+          bandit -c pyproject.toml -r src/ -q
+
+      - name: Scan dependencies for vulnerabilities
+        run: |
+          pip-audit --require-hashes=false -r requirements.txt || true
+
       - name: Type check with mypy
         run: |
           mypy src/
 
       - name: Test with pytest
         run: |
-          pytest tests/ -v --cov=src/offsec_ai --cov-report=xml
+          pytest tests/ -v --cov=src/offsec_ai --cov-report=xml --cov-fail-under=60
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

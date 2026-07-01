@@ -5,11 +5,13 @@ Provides pluggable LLM-based verdict on whether a model response indicates
 a vulnerability. Falls back gracefully when no provider is configured.
 
 Configure via environment variables:
-    OPENAI_API_KEY      — enables OpenAI provider
-    ANTHROPIC_API_KEY   — enables Anthropic provider
-    GEMINI_API_KEY      — enables Google Gemini provider
+    GEMINI_API_KEY      — enables Google Gemini provider (highest priority)
+    ANTHROPIC_API_KEY   — enables Anthropic provider (second priority)
+    OPENAI_API_KEY      — enables OpenAI provider (third priority)
     OFFSEC_LLM_BASE_URL — enables a local/custom OpenAI-compatible provider
-    OFFSEC_LLM_MODEL    — model name to use (default: gpt-4o-mini / claude-3-haiku / gemini-1.5-flash)
+    OFFSEC_LLM_MODEL    — model name to use (default: gemini-1.5-flash / claude-3-haiku / gpt-4o-mini)
+
+    If multiple keys are set, Gemini is used first, then Anthropic, then OpenAI.
 
 Install optional providers:
     pip install offsec-ai[ai]
@@ -49,12 +51,12 @@ class LLMJudge:
         self._client: Any = None
 
     def _detect_provider(self) -> str | None:
-        if os.getenv("OPENAI_API_KEY") or os.getenv("OFFSEC_LLM_BASE_URL"):
-            return "openai"
-        if os.getenv("ANTHROPIC_API_KEY"):
-            return "anthropic"
         if os.getenv("GEMINI_API_KEY"):
             return "gemini"
+        if os.getenv("ANTHROPIC_API_KEY"):
+            return "anthropic"
+        if os.getenv("OPENAI_API_KEY") or os.getenv("OFFSEC_LLM_BASE_URL"):
+            return "openai"
         return None
 
     def _default_model(self) -> str:

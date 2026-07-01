@@ -68,6 +68,8 @@ class MCPVulnerability(BaseModel):
     remediation: str = ""
     references: list[str] = Field(default_factory=list)
     affected_component: str = ""   # e.g. tool name, resource URI
+    llm_confidence: float | None = None
+    llm_reasoning: str = ""
 
 
 class MCPAuthPosture(BaseModel):

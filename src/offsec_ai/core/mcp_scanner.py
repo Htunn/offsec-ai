@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shlex
 import subprocess
 import time
@@ -44,6 +45,8 @@ from ..utils.mcp_cve_db import (
     scan_for_secrets,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MCPScanner:
     """Security scanner for MCP (Model Context Protocol) endpoints."""
@@ -55,20 +58,26 @@ class MCPScanner:
         cmd: list[str] | None = None,
         headers: dict[str, str] | None = None,
         timeout: float = 15.0,
+        verify_tls: bool = True,
+        judge: object | None = None,
     ) -> None:
         """
         Args:
-            target:    URL for HTTP/SSE transport, or 'stdio://...' for stdio.
-            transport: "http", "sse", or "stdio".
-            cmd:       Command list for stdio transport, e.g. ["python", "server.py"].
-            headers:   Extra HTTP headers (e.g. Authorization).
-            timeout:   Per-request timeout in seconds.
+            target:     URL for HTTP/SSE transport, or 'stdio://...' for stdio.
+            transport:  "http", "sse", or "stdio".
+            cmd:        Command list for stdio transport, e.g. ["python", "server.py"].
+            headers:    Extra HTTP headers (e.g. Authorization).
+            timeout:    Per-request timeout in seconds.
+            verify_tls: Verify TLS certificates. Set False for self-signed certs.
+            judge:      Optional LLMJudge instance for AI-assisted triage.
         """
         self.target = target
         self.transport = MCPTransport(transport)
         self.cmd = cmd or []
         self.headers = headers or {}
         self.timeout = timeout
+        self.verify_tls = verify_tls
+        self._judge = judge
 
     # ------------------------------------------------------------------
     # Public API
@@ -101,6 +110,8 @@ class MCPScanner:
                 **self.headers,
             },
             timeout=self.timeout,
+            trust_env=False,
+            verify=self.verify_tls,  # noqa: S501 — intentional for security scanning
         ) as client:
             # 1. Initialize handshake
             server_info, init_error = await self._initialize_http(client)
@@ -134,6 +145,10 @@ class MCPScanner:
         # 4. Security analysis (no network needed)
         result.vulnerabilities = self._analyze_security(result)
         result.cve_matches = self._match_cves(result.server_info)
+
+        # 5. Optional LLM triage
+        if self._judge and getattr(self._judge, "provider", None):
+            self._phase_llm_triage(result)
 
         return result
 
@@ -191,6 +206,7 @@ class MCPScanner:
         no_auth_client = httpx.AsyncClient(
             headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "User-Agent": "offsec-ai/2.0.1"},
             timeout=self.timeout,
+            trust_env=False,
         )
         async with no_auth_client:
             try:
@@ -363,6 +379,29 @@ class MCPScanner:
     # ------------------------------------------------------------------
     # Security analysis (no network)
     # ------------------------------------------------------------------
+
+    def _phase_llm_triage(self, result: MCPScanResult) -> None:
+        """Use LLM judge to enrich MEDIUM/LOW MCP findings."""
+        ambiguous = {MCPVulnSeverity.MEDIUM, MCPVulnSeverity.LOW}
+        for vuln in result.vulnerabilities:
+            if vuln.severity not in ambiguous:
+                continue
+            if not self._judge:
+                continue
+            try:
+                verdict = self._judge.evaluate(
+                    category=vuln.vuln_id,
+                    probe=vuln.title,
+                    response=vuln.evidence or vuln.description,
+                )
+                vuln.llm_confidence = float(verdict.get("confidence", 0.0))
+                vuln.llm_reasoning = str(verdict.get("reason", ""))
+                if verdict.get("vulnerable") and vuln.llm_confidence > 0.7:
+                    if vuln.severity == MCPVulnSeverity.LOW:
+                        vuln.severity = MCPVulnSeverity.MEDIUM
+                        vuln.evidence += " [LLM: upgraded from LOW]"
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("LLM triage error for %s: %s", vuln.vuln_id, exc)
 
     def _parse_tool(self, raw: dict) -> MCPTool:
         desc = raw.get("description", "")

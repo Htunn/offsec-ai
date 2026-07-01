@@ -102,6 +102,7 @@ class LLMOwaspScanner:
                 **self.headers,
             },
             timeout=self.timeout,
+            trust_env=False,
         ) as client:
             # Run all categories — non-testable are handled synchronously
             tasks = []

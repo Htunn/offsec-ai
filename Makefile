@@ -37,7 +37,7 @@ test:
 	pytest tests/ -v
 
 test-cov:
-	pytest tests/ -v --cov=src/offsec_ai --cov-report=html --cov-report=term
+	pytest tests/ -v --cov=src/offsec_ai --cov-report=html --cov-report=term --cov-fail-under=60
 
 lint:
 	flake8 src/ tests/ examples/
